@@ -160,7 +160,10 @@ M.copyFileFromSB = function( srcName, srcPath, dstName, dstPath, overwrite )
         return file:match("^.+/(.+)$")
     end
 
-
+    M.get_file_name_no_extension = function(file)
+        local filename = file:match("^.+/(.+)$")
+        return filename:match("(.+)%..+$")
+    end
 
 -- Touch listener for handles to resize the image
 -- Function to update the size and position of the selected image based on the handle and movement

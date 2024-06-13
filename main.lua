@@ -18,7 +18,8 @@ uiGroup:toFront()
 local selectedButton = "resize" -- Resize button selected by default
 local removeHandles, showHandles, updateHandles, updateTextColors, moveImageUp, 
 moveImageDown, deleteImage, selectedImage, ButtonRotate, ButtonResize,
-moveImageToTop, moveImageToBottom, saveWorkspace, loadWorkspace;
+moveImageToTop, moveImageToBottom, saveWorkspace, loadWorkspace,updateImageListOrde,
+exportWorkspace;
 local images = {}
 local handles = {}
 local resizeHandles = {}
@@ -116,6 +117,26 @@ local function onButtonDownTouch(event)
     end 
     return true
 end
+onButtonExportTouch = function(event)
+    local self = event.target
+    local InitialScaleX = self.InitialScaleX
+    local InitialScaleY = self.InitialScaleY
+    if event.phase == "began" then
+        display.getCurrentStage():setFocus(self, event.id)
+        self.xScale = InitialScaleX - 0.05
+        self.yScale = InitialScaleY - 0.05
+        self.isFocus = true
+    elseif self.isFocus then
+        if event.phase == "ended" or event.phase == "cancelled" then
+            self.xScale = InitialScaleX
+            self.yScale = InitialScaleY
+            display.getCurrentStage():setFocus(self, nil)
+            self.isFocus = false
+            exportWorkspace()
+        end
+    end 
+    return true
+end
 
 -- Function to set button tint
 local function setButtonTint(button, isSelected)
@@ -183,7 +204,7 @@ local function onButtonSaveTouch(event)
             self.yScale = InitialScaleY
             display.getCurrentStage():setFocus(self, nil)
             self.isFocus = false
-            saveWorkspace()
+            timer.performWithDelay(100, saveWorkspace())
         end
     end 
     return true
@@ -203,7 +224,7 @@ local function onButtonLoadTouch(event)
             self.yScale = InitialScaleY
             display.getCurrentStage():setFocus(self, nil)
             self.isFocus = false
-            loadWorkspace()
+            timer.performWithDelay(100, loadWorkspace())
         end
     end 
     return true
@@ -228,6 +249,17 @@ ButtonLoad.InitialScaleY = ButtonLoad.yScale
 ButtonLoad.x = 53
 ButtonLoad.y = 20
 ButtonLoad:addEventListener("touch", onButtonLoadTouch)
+
+ButtonExport = display.newImage("GFX/export.png")
+ButtonExport.xScale = 0.3
+ButtonExport.yScale = 0.3
+ButtonExport.InitialScaleX = ButtonExport.xScale
+ButtonExport.InitialScaleY = ButtonExport.yScale
+ButtonExport.x = 86
+ButtonExport.y = 20
+ButtonExport:addEventListener("touch", onButtonExportTouch)
+
+
 
 ButtonResize = display.newImage("GFX/resize.png")
 ButtonResize.xScale = 0.3
@@ -295,6 +327,9 @@ uiGroup:insert(ButtonResize)
 uiGroup:insert(ButtonRotate)
 uiGroup:insert(ButtonToTop)
 uiGroup:insert(ButtonToBottom)
+uiGroup:insert(ButtonExport)
+uiGroup:insert(ButtonLoad)
+uiGroup:insert(ButtonSave)
 
 
 -- Set initial tint for buttons
@@ -614,6 +649,7 @@ local function showRenamePopup(imageID, textElement)
     renameText.yScale = 0.5
 
     local nameInput = native.newTextField(_W / 2, _H / 2, 200, 40)
+    nameInput.text = image.name  -- Set the initial text to the current image name
     renameGroup:insert(nameInput)
 
     local function onRenameComplete(event)
@@ -699,6 +735,7 @@ local function moveImageInOrderTableDown(imageID)
     end
 end
 
+local scrollViewItemCount = 0
 -- Initialize the image order table when adding a new image
 local function addImageToList(imageID)
     local group = display.newGroup()
@@ -716,14 +753,14 @@ local function addImageToList(imageID)
     if not image then
         return
     end -- Exit if image not found
-    local initialY = 30
+
     -- Text element for the image name
     local text =
         display.newText(
         {
             text = image.name, -- Use the image's name for display
             x = 20,
-            y = initialY,
+            y = 0,  -- Positioning within group will be handled later
             font = native.systemFont,
             fontSize = 20 * 2
         }
@@ -740,7 +777,7 @@ local function addImageToList(imageID)
     -- Rename button
     local renameButton = display.newImage("GFX/edit.png")
     renameButton.x = 200
-    renameButton.y = initialY
+    renameButton.y = 0  -- Positioning within group will be handled later
     renameButton.xScale = 0.3
     renameButton.yScale = 0.3
     renameButton:setFillColor(0.5, 0.5, 0.6)
@@ -760,7 +797,7 @@ local function addImageToList(imageID)
     -- Delete button
     local deleteButton = display.newImage("GFX/delete.png")
     deleteButton.x = 240
-    deleteButton.y = initialY
+    deleteButton.y = 0  -- Positioning within group will be handled later
     deleteButton.xScale = 0.3
     deleteButton.yScale = 0.3
     deleteButton:setFillColor(1, 0, 0)
@@ -798,29 +835,24 @@ local function addImageToList(imageID)
         end
     )
 
-    -- Adjust positions of existing elements to move them down
-    for _, element in pairs(textElements) do
-        if element.group ~= group then
-            element.group.y = element.group.y + 40
-        end
-    end
-
-    group.y = 0 -- Place the new element at the top
     scrollView:insert(group)
 
     -- Add the new image to the order table
     table.insert(imageOrder, imageID)
+    group.y = 0
+    -- Update the scroll view positions
+    updateImageListOrder()
 end
--- Function to update the Y positions of list items based on their order in the images table
-local function updateImageListOrder()
-    for i = 1, #images do
-        local image = images[i]
-        if textElements[image.ID] then
-            -- Position elements so that the newest is at the top
-            textElements[image.ID].group.y = (#images - i) * 40
+updateImageListOrder = function()
+    local numImages = #imageOrder
+    for i, imageID in ipairs(imageOrder) do
+        local element = textElements[imageID]
+        if element then
+            element.group.y = 20 + (numImages - i) * 40 -- Adjust the spacing between elements
         end
     end
 end
+
 -- Function to delete an image and update the scroll view
 deleteImage = function(imageID)
     -- Remove the image from the images table
@@ -896,17 +928,6 @@ end
 moveImageUp = function(imageID)
     moveImageInOrderTableUp(imageID)
     reorderImageGroup()
-    -- Swap the Y positions in the scroll view list
-    for i = 1, #images do
-        if images[i].ID == imageID then
-            if i > 1 then
-                local tempY = textElements[images[i].ID].group.y
-                textElements[images[i].ID].group.y = textElements[images[i - 1].ID].group.y
-                textElements[images[i - 1].ID].group.y = tempY
-            end
-            break
-        end
-    end
     updateImageListOrder()
 end
 
@@ -914,31 +935,19 @@ end
 moveImageDown = function(imageID)
     moveImageInOrderTableDown(imageID)
     reorderImageGroup()
-    -- Swap the Y positions in the scroll view list
-    for i = 1, #images do
-        if images[i].ID == imageID then
-            if i < #images then
-                local tempY = textElements[images[i].ID].group.y
-                textElements[images[i].ID].group.y = textElements[images[i + 1].ID].group.y
-                textElements[images[i + 1].ID].group.y = tempY
-            end
-            break
-        end
-    end
     updateImageListOrder()
 end
 
 -- Initialize the image order table when adding a new image
 local function nextStep(FileToProcessPath)
-    local uniqueID = os.time() -- Use a timestamp or a UUID for a unique ID
+    local uniqueID = os.time() + math.random(1, 1000) -- Ensure a more unique ID
     createdImmages = createdImmages + 1
     local newImage = display.newImage(Service.get_file_name(FileToProcessPath), system.TemporaryDirectory)
     newImage.path = FileToProcessPath
     newImage.x = _W / 2
     newImage.y = _H / 2
     newImage.ID = uniqueID -- Unique internal ID
-    newImage.name = "Image" .. (createdImmages) -- Name for display purposes
-    --newImage.path = Service.get_file_name(FileToProcessPath) -- Store the image path
+    newImage.name = Service.get_file_name_no_extension(FileToProcessPath) -- Name for display purposes
     newImage:addEventListener("touch", imageTouch)
     imageGroup:insert(newImage) -- Add the new image to the imageGroup
     table.insert(images, newImage)
@@ -959,21 +968,23 @@ end
 -- Function to load the file using tinyfiledialogs plugin
 local function LoadFileFN()
     local opts = {
-        title = "Choose image (PNG) to process",
+        title = "Choose image(s) (PNG) to process",
         filter_patterns = "*.png",
         filter_description = "PNG FILES",
-        allow_multiple_selects = false
+        allow_multiple_selects = true  -- Allow multiple file selections
     }
-    local FileToProcessPath = myPlugin.openFileDialog(opts)
-    if FileToProcessPath then
-        Service.copyFileToSB(
-            Service.get_file_name(FileToProcessPath),
-            Service.getPath(FileToProcessPath),
-            Service.get_file_name(FileToProcessPath),
-            system.TemporaryDirectory,
-            true
-        )
-        nextStep(FileToProcessPath)
+    local FileToProcessPaths = myPlugin.openFileDialog(opts)
+    if FileToProcessPaths then
+        for _, FileToProcessPath in ipairs(FileToProcessPaths) do
+            Service.copyFileToSB(
+                Service.get_file_name(FileToProcessPath),
+                Service.getPath(FileToProcessPath),
+                Service.get_file_name(FileToProcessPath),
+                system.TemporaryDirectory,
+                true
+            )
+            nextStep(FileToProcessPath)
+        end
     end
 end
 ButtonAddNew.currentXScale = ButtonAddNew.xScale
@@ -1020,17 +1031,22 @@ end
 --- -save load functionality
 local function gatherImageData()
     local imageData = {}
-    for i, img in ipairs(images) do
-        table.insert(imageData, {
-            path = img.path,
-            name = img.name,
-            x = img.x,
-            y = img.y,
-            width = img.width,
-            height = img.height,
-            rotation = img.rotation,
-            hierarchyIndex = i  -- Save the position in the display hierarchy
-        })
+    for i, imageID in ipairs(imageOrder) do
+        for _, img in ipairs(images) do
+            if img.ID == imageID then
+                table.insert(imageData, {
+                    path = img.path,
+                    name = img.name,
+                    x = img.x,
+                    y = img.y,
+                    width = img.width,
+                    height = img.height,
+                    rotation = img.rotation,
+                    hierarchyIndex = i  -- Save the position in the display hierarchy
+                })
+                break
+            end
+        end
     end
     return imageData
 end
@@ -1040,7 +1056,7 @@ saveWorkspace = function()
         title = "Save Workspace",
         filter_patterns = "*.lua",
         filter_description = "Lua Files",
-        allow_multiple_selects = false,
+        default_path_and_file = "untitled.lua",  -- Set the default file name
     }
     local savePath = myPlugin.saveFileDialog(opts)
     if savePath then
@@ -1063,6 +1079,7 @@ local function clearWorkspace()
     images = {}
     imageOrder = {}
     textElements = {}
+    scrollViewItemCount = 0 -- Reset the counter
     removeHandles()
 
     -- Clear the scroll view contents
@@ -1090,82 +1107,136 @@ local function clearWorkspace()
 end
 
 loadWorkspace = function()
-    local opts = {
-        title = "Load Workspace",
-        filter_patterns = "*.lua",
-        filter_description = "Lua Files",
-        allow_multiple_selects = false,
-    }
-    local loadPath = myPlugin.openFileDialog(opts)
-    if loadPath then
-        local file = io.open(loadPath, "r")
-        if file then
-            local serializedData = file:read("*a")
-            file:close()
-            local imageData = json.decode(serializedData)
+    local confirm = native.showAlert("Confirmation", "Do you really want to clear the current workspace without saving?", { "Yes", "Cancel" }, function(event)
+        if event.action == "clicked" and event.index == 1 then
+            local opts = {
+                title = "Load Workspace",
+                filter_patterns = "*.lua",
+                filter_description = "Lua Files",
+                allow_multiple_selects = false,
+            }
+            local loadPath = myPlugin.openFileDialog(opts)
+            if loadPath then
+                local file = io.open(loadPath, "r")
+                if file then
+                    local serializedData = file:read("*a")
+                    file:close()
+                    local imageData = json.decode(serializedData)
 
-            -- Add check for hierarchyIndex presence
-            for _, data in ipairs(imageData) do
-                if not data.hierarchyIndex then
-                    print("Error: Missing hierarchyIndex in saved data")
-                    return
+                    -- Add check for hierarchyIndex presence
+                    for _, data in ipairs(imageData) do
+                        if not data.hierarchyIndex then
+                            print("Error: Missing hierarchyIndex in saved data")
+                            return
+                        end
+                    end
+
+                    -- Prompt for confirmation to clear current workspace
+                            clearWorkspace()
+
+                            -- Load new images
+                            for _, data in ipairs(imageData) do
+                                local originalPath = data.path
+                                local fileName = Service.get_file_name(originalPath)
+                                local tempPath = system.pathForFile(fileName, system.TemporaryDirectory)
+
+                                Service.copyFileToSB(
+                                    fileName,
+                                    Service.getPath(originalPath),
+                                    fileName,
+                                    system.TemporaryDirectory,
+                                    true
+                                )
+
+                                local newImage = display.newImage(fileName, system.TemporaryDirectory)
+                                newImage.x = data.x
+                                newImage.y = data.y
+                                newImage.width = data.width
+                                newImage.height = data.height
+                                newImage.rotation = data.rotation
+                                newImage.ID = os.time() + math.random(1, 1000)  -- Generate a unique ID
+                                newImage.name = data.name
+                                newImage.path = originalPath
+                                newImage.hierarchyIndex = data.hierarchyIndex  -- Ensure hierarchyIndex is preserved
+                                newImage:addEventListener("touch", imageTouch)
+                                table.insert(images, newImage)
+                                addImageToList(newImage.ID)
+                            end
+
+                            -- Sort images based on hierarchyIndex and populate imageOrder
+                            table.sort(images, function(a, b)
+                                return a.hierarchyIndex < b.hierarchyIndex
+                            end)
+                            for _, img in ipairs(images) do
+                                table.insert(imageOrder, img.ID)
+                            end
+
+                            -- Reorder the imageGroup to reflect the hierarchy
+                            reorderImageGroup()
+
+                            initializeImageOrder()
+                            updateImageListOrder()
+                        end
+
+                else
+                    print("Error loading file")
                 end
             end
+        end)
+end
 
-            -- Prompt for confirmation to clear current workspace
-            local confirm = native.showAlert("Confirmation", "Do you want to clear the current workspace?", { "Yes", "No" }, function(event)
-                if event.action == "clicked" and event.index == 1 then
-                    clearWorkspace()
-
-                    -- Load new images
-                    for _, data in ipairs(imageData) do
-                        local originalPath = data.path
-                        local fileName = Service.get_file_name(originalPath)
-                        local tempPath = system.pathForFile(fileName, system.TemporaryDirectory)
-
-                        Service.copyFileToSB(
-                            fileName,
-                            Service.getPath(originalPath),
-                            fileName,
-                            system.TemporaryDirectory,
-                            true
-                        )
-
-                        local newImage = display.newImage(fileName, system.TemporaryDirectory)
-                        newImage.x = data.x
-                        newImage.y = data.y
-                        newImage.width = data.width
-                        newImage.height = data.height
-                        newImage.rotation = data.rotation
-                        newImage.ID = os.time() + math.random(1, 1000)  -- Generate a unique ID
-                        newImage.name = data.name
-                        newImage.path = originalPath
-                        newImage.hierarchyIndex = data.hierarchyIndex  -- Ensure hierarchyIndex is preserved
-                        newImage:addEventListener("touch", imageTouch)
-                        table.insert(images, newImage)
-                        addImageToList(newImage.ID)
-                    end
-
-                    -- Sort images based on hierarchyIndex and populate imageOrder
-                    table.sort(images, function(a, b)
-                        return a.hierarchyIndex > b.hierarchyIndex
-                    end)
-                    for _, img in ipairs(images) do
-                        table.insert(imageOrder, img.ID)
-                    end
-
-                    -- Reorder the imageGroup to reflect the hierarchy
-                    reorderImageGroup()
-
-                    initializeImageOrder()
-                end
-            end)
+local function gatherImageExportData()
+    local imageData = {}
+    for i, img in ipairs(images) do
+        table.insert(imageData, {
+            path = "GFX/" .. Service.get_file_name(img.path),
+            name = img.name,
+            x = img.x,
+            y = img.y,
+            width = img.width,
+            height = img.height,
+            rotation = img.rotation,
+            hierarchyIndex = i  -- Save the position in the display hierarchy
+        })
+    end
+    return imageData
+end
+local function serializeToLuaTable(data)
+    local serialized = "return " .. require("json").encode(data)
+    return serialized
+end
+exportWorkspace = function()
+    local opts = {
+        title = "Export Workspace",
+        filter_patterns = "*.lua",
+        filter_description = "Lua Files",
+        default_path_and_file = "image_data.lua",
+    }
+    local exportPath = myPlugin.saveFileDialog(opts)
+    if exportPath then
+        local imageData = gatherImageData()
+        local file = io.open(exportPath, "w")
+        if file then
+            file:write("return {\n")
+            for _, data in ipairs(imageData) do
+                file:write("    {\n")
+                file:write(string.format("        y = %f,\n", data.y))
+                file:write(string.format("        path = \"%s\",\n", "GFX/" .. Service.get_file_name(data.path)))
+                file:write(string.format("        name = \"%s\",\n", data.name))
+                file:write(string.format("        x = %f,\n", data.x))
+                file:write(string.format("        height = %f,\n", data.height))
+                file:write(string.format("        rotation = %d,\n", data.rotation))
+                file:write(string.format("        hierarchyIndex = %d,\n", data.hierarchyIndex))
+                file:write(string.format("        width = %f\n", data.width))
+                file:write("    },\n")
+            end
+            file:write("}\n")
+            file:close()
         else
-            print("Error loading file")
+            print("Error exporting file")
         end
     end
 end
-
 
 
 -- Add the background touch listener to the entire screen
