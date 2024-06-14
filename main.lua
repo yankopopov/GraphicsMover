@@ -1131,58 +1131,58 @@ loadWorkspace = function()
                         end
                     end
 
-                    -- Prompt for confirmation to clear current workspace
-                            clearWorkspace()
+                    -- Clear current workspace
+                    clearWorkspace()
 
-                            -- Load new images
-                            for _, data in ipairs(imageData) do
-                                local originalPath = data.path
-                                local fileName = Service.get_file_name(originalPath)
-                                local tempPath = system.pathForFile(fileName, system.TemporaryDirectory)
+                    -- Load new images
+                    for _, data in ipairs(imageData) do
+                        local originalPath = data.path
+                        local fileName = Service.get_file_name(originalPath)
+                        local tempPath = system.pathForFile(fileName, system.TemporaryDirectory)
 
-                                Service.copyFileToSB(
-                                    fileName,
-                                    Service.getPath(originalPath),
-                                    fileName,
-                                    system.TemporaryDirectory,
-                                    true
-                                )
+                        Service.copyFileToSB(
+                            fileName,
+                            Service.getPath(originalPath),
+                            fileName,
+                            system.TemporaryDirectory,
+                            true
+                        )
 
-                                local newImage = display.newImage(fileName, system.TemporaryDirectory)
-                                newImage.x = data.x
-                                newImage.y = data.y
-                                newImage.width = data.width
-                                newImage.height = data.height
-                                newImage.rotation = data.rotation
-                                newImage.ID = os.time() + math.random(1, 1000)  -- Generate a unique ID
-                                newImage.name = data.name
-                                newImage.path = originalPath
-                                newImage.hierarchyIndex = data.hierarchyIndex  -- Ensure hierarchyIndex is preserved
-                                newImage:addEventListener("touch", imageTouch)
-                                table.insert(images, newImage)
-                                addImageToList(newImage.ID)
-                            end
+                        local newImage = display.newImage(fileName, system.TemporaryDirectory)
+                        newImage.x = data.x
+                        newImage.y = data.y
+                        newImage.width = data.width
+                        newImage.height = data.height
+                        newImage.rotation = data.rotation
+                        newImage.ID = os.time() + math.random(1, 1000)  -- Generate a unique ID
+                        newImage.name = data.name
+                        newImage.path = originalPath
+                        newImage.hierarchyIndex = data.hierarchyIndex  -- Ensure hierarchyIndex is preserved
+                        newImage:addEventListener("touch", imageTouch)
+                        table.insert(images, newImage)
+                        addImageToList(newImage.ID)
+                    end
 
-                            -- Sort images based on hierarchyIndex and populate imageOrder
-                            table.sort(images, function(a, b)
-                                return a.hierarchyIndex < b.hierarchyIndex
-                            end)
-                            for _, img in ipairs(images) do
-                                table.insert(imageOrder, img.ID)
-                            end
+                    -- Sort images based on hierarchyIndex and populate imageOrder
+                    table.sort(images, function(a, b)
+                        return a.hierarchyIndex < b.hierarchyIndex
+                    end)
+                    imageOrder = {}
+                    for _, img in ipairs(images) do
+                        table.insert(imageOrder, img.ID)
+                    end
 
-                            -- Reorder the imageGroup to reflect the hierarchy
-                            reorderImageGroup()
+                    -- Reorder the imageGroup to reflect the hierarchy
+                    reorderImageGroup()
 
-                            initializeImageOrder()
-                            updateImageListOrder()
-                        end
-
+                    -- Update the scroll view positions
+                    updateImageListOrder()
                 else
                     print("Error loading file")
                 end
             end
-        end)
+        end
+    end)
 end
 
 local function gatherImageExportData()
