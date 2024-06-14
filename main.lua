@@ -141,7 +141,7 @@ end
 -- Function to set button tint
 local function setButtonTint(button, isSelected)
     if isSelected then
-        button:setFillColor(1, 0, 0) -- Red tint
+        button:setFillColor(1, 0.6, 0) -- Red tint
     else
         button:setFillColor(1, 1, 1) -- Neutral tint
     end
@@ -759,7 +759,7 @@ local function addImageToList(imageID)
         display.newText(
         {
             text = image.name, -- Use the image's name for display
-            x = 20,
+            x = 45,
             y = 0,  -- Positioning within group will be handled later
             font = native.systemFont,
             fontSize = 20 * 2
@@ -776,11 +776,11 @@ local function addImageToList(imageID)
 
     -- Rename button
     local renameButton = display.newImage("GFX/edit.png")
-    renameButton.x = 200
+    renameButton.x = 20
     renameButton.y = 0  -- Positioning within group will be handled later
     renameButton.xScale = 0.3
     renameButton.yScale = 0.3
-    renameButton:setFillColor(0.5, 0.5, 0.6)
+    renameButton:setFillColor(0.7, 0.7, 0.8)
     group:insert(renameButton)
 
     -- Touch listener for the rename button
@@ -796,12 +796,15 @@ local function addImageToList(imageID)
 
     -- Delete button
     local deleteButton = display.newImage("GFX/delete.png")
-    deleteButton.x = 240
+    deleteButton.x = 280
     deleteButton.y = 0  -- Positioning within group will be handled later
     deleteButton.xScale = 0.3
     deleteButton.yScale = 0.3
-    deleteButton:setFillColor(1, 0, 0)
+    deleteButton:setFillColor(1, 0.6, 0.6)
     group:insert(deleteButton)
+
+
+
 
     -- Touch listener for the delete button
     deleteButton:addEventListener(
@@ -813,6 +816,48 @@ local function addImageToList(imageID)
             return true
         end
     )
+
+    local visibleButton = display.newImage("GFX/visible.png")
+    visibleButton.x = 248
+    visibleButton.y = 0  -- Positioning within group will be handled later
+    visibleButton.xScale = 0.3
+    visibleButton.yScale = 0.3
+    visibleButton:setFillColor(0.6, 0.6, 0.7)
+    group:insert(visibleButton)
+
+-- Flag to track the button's state
+    local isButtonPressed = false
+
+    -- Function to change the button image when pressed
+    local function onVisibleButtonTouch(event)
+        if event.phase == "began" then
+            visibleButton:removeSelf()  -- Remove the old image
+            
+            if isButtonPressed then
+                visibleButton = display.newImage("GFX/visible.png")  -- Set the original image
+                togleVisibility(true, imageID)
+                isButtonPressed = false
+            else
+                visibleButton = display.newImage("GFX/invisible.png")  -- Set the new image
+                togleVisibility(false, imageID)
+                isButtonPressed = true
+            end
+            
+            visibleButton.x = 248
+            visibleButton.y = 0
+            visibleButton.xScale = 0.3
+            visibleButton.yScale = 0.3
+            visibleButton:setFillColor(0.6, 0.6, 0.7)
+            group:insert(visibleButton)
+            
+            -- Re-add the event listener to the new image
+            visibleButton:addEventListener("touch", onVisibleButtonTouch)
+        end
+        return true
+    end
+
+    -- Add the event listener to the button
+    visibleButton:addEventListener("touch", onVisibleButtonTouch)
 
     -- Make the text element touch-sensitive to select the image
     text:addEventListener(
@@ -852,6 +897,23 @@ updateImageListOrder = function()
         end
     end
 end
+
+togleVisibility =function(visible,imageID)
+    for i, img in ipairs(images) do
+        if img.ID == imageID then
+            if selectedImage == img then
+                if visible then
+                    img.isVisible = true
+                else
+                    img.isVisible = false
+                end
+            end
+            break
+        end
+    end
+
+end
+
 
 -- Function to delete an image and update the scroll view
 deleteImage = function(imageID)
@@ -1241,6 +1303,6 @@ end
 
 -- Add the background touch listener to the entire screen
 local background = display.newRect(_W / 2, _H / 2, _W, _H)
-background:setFillColor(1, 1, 1, 0.7) -- Set to nearly transparent
+background:setFillColor(1, 1, 1, 0.85) -- Set to nearly transparent
 background:addEventListener("touch", backgroundTouch)
 background:toBack() -- Send background to the back layer
