@@ -167,83 +167,7 @@ M.copyFileFromSB = function( srcName, srcPath, dstName, dstPath, overwrite )
 
 -- Touch listener for handles to resize the image
 -- Function to update the size and position of the selected image based on the handle and movement
---[[ M.updateImageSizeAndPosition = function(selectedImage, resizeHandles, handle, dx, dy, proportion, shiftPressed, controlPressed)
-    -- Get the rotation angle in radians
-    local angle = math.rad(selectedImage.rotation)
-    local cosAngle = math.cos(angle)
-    local sinAngle = math.sin(angle)
 
-    -- Calculate the local dx and dy in the rotated coordinate system
-    local localDx = dx * cosAngle + dy * sinAngle
-    local localDy = dy * cosAngle - dx * sinAngle
-
-    local newWidth, newHeight
-
-    if handle == resizeHandles.topLeft then
-        if shiftPressed then
-            newWidth = handle.startWidth - localDx
-            newHeight = newWidth / proportion
-            localDx = handle.startWidth - newWidth
-            localDy = handle.startHeight - newHeight
-        else
-            newWidth = handle.startWidth - localDx
-            newHeight = handle.startHeight - localDy
-        end
-        if not controlPressed then
-            selectedImage.x = handle.startImageX + (localDx * cosAngle - localDy * sinAngle) / 2
-            selectedImage.y = handle.startImageY + (localDx * sinAngle + localDy * cosAngle) / 2
-        end
-    elseif handle == resizeHandles.topRight then
-        if shiftPressed then
-            newWidth = handle.startWidth + localDx
-            newHeight = newWidth / proportion
-            localDx = newWidth - handle.startWidth
-            localDy = handle.startHeight - newHeight
-        else
-            newWidth = handle.startWidth + localDx
-            newHeight = handle.startHeight - localDy
-        end
-
-        if not controlPressed then            
-            selectedImage.x = handle.startImageX + (localDx * cosAngle - localDy * sinAngle) / 2
-            selectedImage.y = handle.startImageY + (localDx * sinAngle + localDy * cosAngle) / 2
-        end
-    elseif handle == resizeHandles.bottomLeft then
-        if shiftPressed then
-            newHeight = handle.startHeight + localDy
-            newWidth = newHeight * proportion
-            localDx = handle.startWidth - newWidth
-            localDy = newHeight - handle.startHeight
-        else
-            newWidth = handle.startWidth - localDx
-            newHeight = handle.startHeight + localDy
-        end
-
-        if not controlPressed then
-            selectedImage.x = handle.startImageX + (localDx * cosAngle - localDy * sinAngle) / 2
-            selectedImage.y = handle.startImageY + (localDx * sinAngle + localDy * cosAngle) / 2
-        end
-    elseif handle == resizeHandles.bottomRight then
-        if shiftPressed then
-            newWidth = handle.startWidth + localDx
-            newHeight = newWidth / proportion
-            localDx = newWidth - handle.startWidth
-            localDy = newHeight - handle.startHeight
-        else
-            newWidth = handle.startWidth + localDx
-            newHeight = handle.startHeight + localDy
-        end
-
-        if not controlPressed then
-            selectedImage.x = handle.startImageX + (localDx * cosAngle - localDy * sinAngle) / 2
-            selectedImage.y = handle.startImageY + (localDx * sinAngle + localDy * cosAngle) / 2
-        end
-    end
-
-    -- Apply the new dimensions
-    selectedImage.width = newWidth
-    selectedImage.height = newHeight
-end ]]
 
 M.updateImageSizeAndPosition = function(selectedImage, resizeHandles, handle, dx, dy, proportion, shiftPressed, controlPressed)
     -- Get the rotation angle in radians
@@ -358,5 +282,116 @@ M.updateImageSizeAndPosition = function(selectedImage, resizeHandles, handle, dx
     selectedImage.width = math.abs(newWidth)
     selectedImage.height = math.abs(newHeight)
 end
+
+M.createSlider = function(options)
+    -- Default options
+    options = options or {}
+    local width = options.width or 200
+    local height = options.height or 4
+    local thumbRadius = options.thumbRadius or 10
+    local capRadius = height / 2
+    local minValue = options.minValue or 0
+    local maxValue = options.maxValue or 1  -- Ensure maxValue is 1 for alpha
+    local startValue = options.startValue or 1  -- Ensure startValue is 1 for alpha
+    local onChange = options.onChange or function(value) end
+
+    -- Create slider group
+    local sliderGroup = display.newGroup()
+
+    -- Create the track
+    local track = display.newRect(sliderGroup, 0, 0, width, height)
+    track:setFillColor(0.8, 0.8, 0.8)
+    track.anchorX = 0
+    track.x = -width / 2
+
+    -- Create the filled part of the track
+    local filledTrack = display.newRect(sliderGroup, 0, 0, (startValue - minValue) / (maxValue - minValue) * width, height)
+    filledTrack:setFillColor(0.3, 0.6, 0.9)
+    filledTrack.anchorX = 0
+    filledTrack.x = -width / 2
+
+    -- Create the caps
+    local leftCap = display.newCircle(sliderGroup, -width / 2, 0, capRadius)
+    leftCap:setFillColor(0.3, 0.6, 0.9) -- same color as the filled track
+    local rightCap = display.newCircle(sliderGroup, width / 2, 0, capRadius)
+    rightCap:setFillColor(0.8, 0.8, 0.8)
+
+    -- Create the thumb
+    local thumb = display.newCircle(sliderGroup, 0, 0, thumbRadius * 2)
+    thumb.xScale = 0.5
+    thumb.yScale = 0.5
+    thumb:setFillColor(0.3, 0.6, 0.9)
+    thumb.x = (startValue - minValue) / (maxValue - minValue) * width - width / 2
+
+    -- Functions to show and hide the touch overlay
+    local showOverlay = function(overlay)
+        transition.cancel("moveOverlay")
+        transition.to(overlay, {xScale = 0.5, yScale = 0.5, time = 150, tag = "moveOverlay"})
+    end
+
+    local hideOverlay = function(overlay)
+        transition.cancel("moveOverlay")
+        transition.to(overlay, {xScale = 0.1, yScale = 0.1, time = 150, onComplete = function() overlay.isVisible = false end, tag = "moveOverlay"})
+    end
+
+    -- Create the touch overlay
+    local touchOverlay = display.newCircle(sliderGroup, thumb.x, thumb.y, thumbRadius * 4)
+    touchOverlay.xScale = 0.1
+    touchOverlay.yScale = 0.1
+    touchOverlay:setFillColor(0.3, 0.6, 0.9, 0.3)
+    touchOverlay.isVisible = false
+
+    -- Touch event for the thumb
+    local function onThumbTouch(event)
+        if event.phase == "began" then
+            display.getCurrentStage():setFocus(thumb)
+            thumb.isFocus = true
+            touchOverlay.isVisible = true
+            showOverlay(touchOverlay)
+        elseif event.phase == "moved" then
+            if thumb.isFocus then
+                local newX = event.x - sliderGroup.x
+                if newX < -width / 2 then
+                    newX = -width / 2
+                elseif newX > width / 2 then
+                    newX = width / 2
+                end
+                thumb.x = newX
+                touchOverlay.x = newX
+                filledTrack.width = newX + width / 2
+                local value = minValue + (newX + width / 2) / width * (maxValue - minValue)
+                onChange(value)
+            end
+        elseif event.phase == "ended" or event.phase == "cancelled" then
+            display.getCurrentStage():setFocus(nil)
+            thumb.isFocus = nil
+            hideOverlay(touchOverlay)
+        end
+        return true
+    end
+
+    thumb:addEventListener("touch", onThumbTouch)
+
+    -- Function to set the slider value programmatically
+    function sliderGroup:setValue(value)
+        value = math.max(minValue, math.min(maxValue, value))
+        thumb.x = (value - minValue) / (maxValue - minValue) * width - width / 2
+        touchOverlay.x = thumb.x
+        filledTrack.width = thumb.x + width / 2
+        onChange(value)
+    end
+
+    -- Function to get the slider value
+    function sliderGroup:getValue()
+        return minValue + (thumb.x + width / 2) / width * (maxValue - minValue)
+    end
+
+    -- Initialize the slider value
+    sliderGroup:setValue(startValue)
+
+    return sliderGroup
+end
+
+
 
 return M

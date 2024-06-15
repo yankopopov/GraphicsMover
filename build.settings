@@ -59,9 +59,23 @@ settings =
 
 	window =
     {
+		defaultMode = "normal",
+		minViewWidth = 1920,
+		minViewHeight = 1080,
         resizable = true,
 		enableCloseButton = true,
 		enableMinimizeButton = true,
 		enableMaximizeButton = true,
     },
+	macos = {
+		entitlements = {
+			["com.apple.security.assets.pictures.read-write"] = true, -- get access to user's Pictures folder
+			["com.apple.security.files.user-selected.read-write"] = true, -- get arbitrary access?
+			["com.apple.security.files.all"] = true,
+		},
+		        plist =
+        {
+            NSHumanReadableCopyright = "Copyright © 2024 Yanko Popov"
+        },
+},
 }

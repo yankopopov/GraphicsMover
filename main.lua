@@ -10,11 +10,18 @@ _H = display.contentHeight
 local imageGroup = display.newGroup()
 local handleGroup = display.newGroup()
 local uiGroup = display.newGroup()
+local propertiesGroup = display.newGroup()
 
 -- Ensure the UI group is above the image group
 uiGroup:toFront()
 
--- State variable to track which button is selected
+-- Create a display group for the button drawer
+local myPlugin = require("plugin.tinyfiledialogs")
+local Service = require("service")
+
+--------------------------------------
+-- Declarations --- 
+--------------------------------------
 local selectedButton = "resize" -- Resize button selected by default
 local removeHandles, showHandles, updateHandles, updateTextColors, moveImageUp, 
 moveImageDown, deleteImage, selectedImage, ButtonRotate, ButtonResize,
@@ -26,6 +33,228 @@ local resizeHandles = {}
 local rotateHandles = {}
 local createdImmages = 0
 
+
+--------------------------------------
+--- Image Properties Panel ---
+--------------------------------------
+
+local PropertiesPanel = display.newRoundedRect(propertiesGroup, _W / 2, _H / 2, 230, 160, 5)
+PropertiesPanel:setFillColor(0.8, 0.8, 0.8, 0.8)
+PropertiesPanel.x = 15 + PropertiesPanel.width/2 
+PropertiesPanel.y = (_H - 5) - PropertiesPanel.height/2 
+
+
+local TextOptions = 
+{
+    parent = propertiesGroup,
+    text = "txt",
+    x =0,
+    y =0,
+    font = native.systemFont,
+    fontSize = 15 * 2
+}
+
+local function createmyText(text, x, y)
+    local myText = display.newText(TextOptions)
+    myText.x = x
+    myText.y = y
+    myText.text = text
+    myText:setFillColor(0.4)
+    myText.xScale = 0.5
+    myText.yScale = 0.5
+    myText.anchorX = 1
+    return myText
+end
+local PropertiesXtext = createmyText(" x =", PropertiesPanel.x - PropertiesPanel.width/2 + 70, PropertiesPanel.y - PropertiesPanel.height/2 + 20)
+local PropertiesYtext = createmyText("y =", PropertiesPanel.x - PropertiesPanel.width/2 + 70, PropertiesPanel.y - PropertiesPanel.height/2 + 40)
+local PropertiesScaleXtext = createmyText("width =", PropertiesPanel.x - PropertiesPanel.width/2 + 70, PropertiesPanel.y - PropertiesPanel.height/2 + 60)
+local PropertiesScaleYtext = createmyText("height =", PropertiesPanel.x - PropertiesPanel.width/2 + 70, PropertiesPanel.y - PropertiesPanel.height/2 + 80)
+local PropertiesOpacitytext = createmyText("alpha =", PropertiesPanel.x - PropertiesPanel.width/2 + 70, PropertiesPanel.y - PropertiesPanel.height/2 + 100)
+local PropertiesRotationtext = createmyText("rotation =", PropertiesPanel.x - PropertiesPanel.width/2 + 70, PropertiesPanel.y - PropertiesPanel.height/2 + 140)
+local PropertiesXinput = native.newTextField(PropertiesXtext.x+60, PropertiesXtext.y, 100, 15)
+
+local PropertiesYinput = native.newTextField(PropertiesYtext.x+60, PropertiesYtext.y, 100, 15)
+local PropertiesScaleXinput = native.newTextField(PropertiesScaleXtext.x+60, PropertiesScaleXtext.y, 100, 15)
+local PropertiesScaleYinput = native.newTextField(PropertiesScaleYtext.x+60, PropertiesScaleYtext.y, 100, 15)
+local PropertiesAlphainput = native.newTextField(PropertiesOpacitytext.x+60, PropertiesOpacitytext.y, 100, 15)
+local PropertiesRotationinput = native.newTextField(PropertiesRotationtext.x+60, PropertiesRotationtext.y, 100, 15)
+
+
+local function SliderChanged(value)
+    print(value)
+    if selectedImage then
+        selectedImage.alpha = value
+        PropertiesAlphainput.text = string.format("%.2f", value)
+    end
+end
+
+local SliderOptions = 
+{
+    width = 95,
+    height = 3,
+    thumbRadius = 6,
+    minValue = 0,
+    maxValue = 1,
+    startValue = 1,
+    onChange = function(value)
+        SliderChanged(value)
+    end
+}
+local OpacitySlider = Service.createSlider(SliderOptions)
+OpacitySlider.x = PropertiesOpacitytext.x + 60
+OpacitySlider.y = PropertiesOpacitytext.y + 20
+
+local OpacityHighImage = display.newImage(propertiesGroup, "GFX/opacityHigh.png")
+OpacityHighImage.x = OpacitySlider.x + OpacitySlider.width -40
+OpacityHighImage.y = OpacitySlider.y 
+OpacityHighImage.xScale = 0.2
+OpacityHighImage.yScale = 0.2
+local OpacityLowImage = display.newImage(propertiesGroup, "GFX/opacityLow.png")
+OpacityLowImage.x = OpacitySlider.x - 60
+OpacityLowImage.y = OpacitySlider.y 
+OpacityLowImage.xScale = 0.2
+OpacityLowImage.yScale = 0.2
+
+propertiesGroup:insert(OpacitySlider)
+propertiesGroup:insert(PropertiesXinput)
+propertiesGroup:insert(PropertiesYinput)
+propertiesGroup:insert(PropertiesScaleXinput)
+propertiesGroup:insert(PropertiesScaleYinput)
+propertiesGroup:insert(PropertiesAlphainput)
+propertiesGroup:insert(PropertiesRotationinput)
+
+local function onAlphaInput(event)
+    if event.phase == "ended" or event.phase == "submitted" then
+        local value = tonumber(event.target.text)
+        if value then
+            value = math.max(0, math.min(1, value)) -- Clamp the value between 0 and 1
+            if selectedImage then
+                selectedImage.alpha = value
+                OpacitySlider:setValue(value)
+            end
+        end
+    end
+end
+
+PropertiesAlphainput:addEventListener("userInput", onAlphaInput)
+
+local function onXInput(event)
+    if event.phase == "ended" or event.phase == "submitted" then
+        local value = tonumber(event.target.text)
+        if value and selectedImage then
+            selectedImage.x = value
+            updateHandles()
+        end
+    end
+end
+
+PropertiesXinput:addEventListener("userInput", onXInput)
+
+local function onYInput(event)
+    if event.phase == "ended" or event.phase == "submitted" then
+        local value = tonumber(event.target.text)
+        if value and selectedImage then
+            selectedImage.y = value
+            updateHandles()
+        end
+    end
+end
+
+PropertiesYinput:addEventListener("userInput", onYInput)
+
+local function onWidthInput(event)
+    if event.phase == "ended" or event.phase == "submitted" then
+        local value = tonumber(event.target.text)
+        if value and selectedImage then
+            selectedImage.width = value
+            updateHandles()
+        end
+    end
+end
+
+PropertiesScaleXinput:addEventListener("userInput", onWidthInput)
+
+local function onHeightInput(event)
+    if event.phase == "ended" or event.phase == "submitted" then
+        local value = tonumber(event.target.text)
+        if value and selectedImage then
+            selectedImage.height = value
+            updateHandles()
+        end
+    end
+end
+
+PropertiesScaleYinput:addEventListener("userInput", onHeightInput)
+
+local function onAlphaInput(event)
+    if event.phase == "ended" or event.phase == "submitted" then
+        local value = tonumber(event.target.text)
+        if value then
+            value = math.max(0, math.min(1, value)) -- Clamp the value between 0 and 1
+            if selectedImage then
+                selectedImage.alpha = value
+                OpacitySlider:setValue(value)
+            end
+        end
+    end
+end
+
+PropertiesAlphainput:addEventListener("userInput", onAlphaInput)
+
+local function onRotationInput(event)
+    if event.phase == "ended" or event.phase == "submitted" then
+        local value = tonumber(event.target.text)
+        if value and selectedImage then
+            selectedImage.rotation = value
+            updateHandles()
+        end
+    end
+end
+
+PropertiesRotationinput:addEventListener("userInput", onRotationInput)
+
+
+local panelVisible = true
+local function updateParameters() 
+    if panelVisible == false then
+        transition.to(propertiesGroup,{alpha = 1, time = 150, 
+        onComplete = function()PropertiesXinput.isVisible = true
+            PropertiesRotationinput.isVisible = true
+            PropertiesAlphainput.isVisible = true
+            PropertiesScaleYinput.isVisible = true
+            PropertiesScaleXinput.isVisible = true
+            PropertiesYinput.isVisible = true end})
+    end
+    panelVisible = true
+    PropertiesXinput.text = selectedImage.x
+    PropertiesYinput.text = selectedImage.y
+    PropertiesScaleXinput.text = selectedImage.width
+    PropertiesScaleYinput.text = selectedImage.height
+    PropertiesAlphainput.text = selectedImage.alpha
+    OpacitySlider.alpha = 1
+    OpacitySlider:setValue(selectedImage.alpha)
+    PropertiesRotationinput.text = selectedImage.rotation
+end
+local function clearParameters()
+    if panelVisible == true then
+        PropertiesXinput.isVisible = false
+        PropertiesRotationinput.isVisible = false
+        PropertiesAlphainput.isVisible = false
+        PropertiesScaleYinput.isVisible = false
+        PropertiesScaleXinput.isVisible = false
+        PropertiesYinput.isVisible = false
+        transition.to(propertiesGroup,{alpha = 0, time = 150,
+        onComplete = function() end})
+    end
+    PropertiesXinput.text = ""
+    PropertiesYinput.text = ""
+    PropertiesScaleXinput.text = ""
+    PropertiesScaleYinput.text = ""
+    PropertiesAlphainput.text = ""
+    OpacitySlider.alpha = 0.1
+    PropertiesRotationinput.text = ""
+    panelVisible = false
+end
 
 -- Event listener for ButtonUp
 local function onButtonUpTouch(event)
@@ -275,6 +504,20 @@ ButtonRotate.x = _W / 2 + 3
 ButtonRotate.y = 20
 ButtonRotate:addEventListener("touch", onButtonRotateTouch)
 
+ButtonPan = display.newImage("GFX/pan.png")
+ButtonPan.xScale = 0.3
+ButtonPan.yScale = 0.3
+ButtonPan.x = _W / 2 + 90
+ButtonPan.y = 20
+--ButtonPan:addEventListener("touch", onButtonPanTouch)
+
+ButtonPoly = display.newImage("GFX/poly.png")
+ButtonPoly.xScale = 0.3
+ButtonPoly.yScale = 0.3
+ButtonPoly.x = _W / 2 + 36
+ButtonPoly.y = 20
+--ButtonPoly:addEventListener("touch", onButtonPolyTouch)
+
 ButtonToTop = display.newImage("GFX/totop.png")
 ButtonToTop.xScale = 0.3
 ButtonToTop.yScale = 0.3
@@ -338,9 +581,7 @@ setButtonTint(ButtonRotate, false)
 setButtonTint(ButtonUp, false)
 setButtonTint(ButtonDown, false)
 
--- Create a display group for the button drawer
-local myPlugin = require("plugin.tinyfiledialogs")
-local Service = require("service")
+
 
 
 -- Initialize visibility and movement variables
@@ -437,7 +678,10 @@ local function handleTouch(event)
         handle.startWidth, handle.startHeight = selectedImage.width, selectedImage.height
         handle.startImageX, handle.startImageY = selectedImage.x, selectedImage.y
         handle.startRotation = selectedImage.rotation
-        handle:scale(HandleScale, HandleScale) -- Scale up the handle being dragged
+        --handle:scale(HandleScale, HandleScale) -- Scale up the handle being dragged
+        transition.cancel("scaleHandles")
+        transition.to(handle, {xScale = HandleScale, yScale = HandleScale, time = 150, tag = "scaleHandles"})
+
     elseif handle.isFocus then
         if event.phase == "moved" then
             local dx, dy = event.x - handle.startX, event.y - handle.startY
@@ -455,6 +699,7 @@ local function handleTouch(event)
                     controlPressed
                 )
                 updateHandles()
+                updateParameters()
             elseif selectedButton == "rotate" then
                 local imageCenterX, imageCenterY = selectedImage.x, selectedImage.y
                 local startAngle = math.atan2(handle.startY - imageCenterY, handle.startX - imageCenterX)
@@ -462,11 +707,14 @@ local function handleTouch(event)
                 local angleDelta = math.deg(currentAngle - startAngle)
                 selectedImage.rotation = handle.startRotation + angleDelta
                 updateHandles()
+                updateParameters()
             end
         elseif event.phase == "ended" or event.phase == "cancelled" then
             display.getCurrentStage():setFocus(handle, nil)
             handle.isFocus = false
-            handle:scale(1 / HandleScale, 1 / HandleScale) -- Scale back the handle to its original size
+            --handle:scale(1 / HandleScale, 1 / HandleScale) -- Scale back the handle to its original size
+            transition.cancel("scaleHandles")
+            transition.to(handle, {xScale = 1, yScale = 1, time = 150, tag = "scaleHandles"})
         end
     end
     return true
@@ -490,6 +738,7 @@ removeHandles = function()
         handle:removeSelf()
     end
     rotateHandles = {}
+    clearParameters()
 end
 
 -- Function to create and show handles around the selected image
@@ -552,6 +801,7 @@ showHandles = function()
                 handle:addEventListener("touch", handleTouch)
             end
         end
+        updateParameters()
     end
 end
 
@@ -571,6 +821,7 @@ local function imageTouch(event)
         end
         if image == selectedImage then
             updateHandles()
+            updateParameters()
         end
     elseif image.isFocus then
         if event.phase == "moved" then
@@ -578,6 +829,7 @@ local function imageTouch(event)
             image.x, image.y = image.prevX + dx, image.prevY + dy
             if image == selectedImage then
                 updateHandles()
+                updateParameters()
             end
         elseif event.phase == "ended" or event.phase == "cancelled" then
             display.getCurrentStage():setFocus(image, nil)
@@ -591,6 +843,7 @@ local function imageTouch(event)
             removeHandles()
             selectedImage = image
             showHandles()
+            updateParameters()
             updateTextColors() -- Update text colors
         end
     end
@@ -609,7 +862,7 @@ local scrollView =
         scrollHeight = scrollViewHeight,
         verticalScrollDisabled = false,
         horizontalScrollDisabled = true,
-        backgroundColor = {0.9, 0.9, 0.9}
+        backgroundColor = {0.9, 0.9, 1, 0.5}
     }
 )
 scrollView.x = _W - 150 -- Adjusted the x position to center the scroll view
@@ -630,7 +883,7 @@ local function showRenamePopup(imageID, textElement)
     end -- Prevent the function from continuing if the image is nil
 
     local renameGroup = display.newGroup()
-    local background = display.newRect(renameGroup, _W / 2, _H / 2, 300, 200)
+    local background = display.newRoundedRect(renameGroup, _W / 2, _H / 2, 300, 200, 5)
     background:setFillColor(0.8, 0.8, 0.8, 0.8)
 
     local renameText =
@@ -1303,6 +1556,7 @@ end
 
 -- Add the background touch listener to the entire screen
 local background = display.newRect(_W / 2, _H / 2, _W, _H)
-background:setFillColor(1, 1, 1, 0.85) -- Set to nearly transparent
+background:setFillColor(0.95, 0.95, 1, 1) -- Set to nearly transparent
 background:addEventListener("touch", backgroundTouch)
 background:toBack() -- Send background to the back layer
+uiGroup:insert(propertiesGroup)
