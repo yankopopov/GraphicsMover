@@ -11,6 +11,7 @@ local imageGroup = display.newGroup()
 local handleGroup = display.newGroup()
 local uiGroup = display.newGroup()
 local propertiesGroup = display.newGroup()
+local tt = transition.to
 
 -- Ensure the UI group is above the image group
 uiGroup:toFront()
@@ -33,16 +34,14 @@ local resizeHandles = {}
 local rotateHandles = {}
 local createdImmages = 0
 
-
 --------------------------------------
 --- Image Properties Panel ---
 --------------------------------------
 
-local PropertiesPanel = display.newRoundedRect(propertiesGroup, _W / 2, _H / 2, 230, 160, 5)
+local PropertiesPanel = display.newRoundedRect(propertiesGroup, _W / 2, _H / 2, 210, 180, 5)
 PropertiesPanel:setFillColor(0.8, 0.8, 0.8, 0.8)
 PropertiesPanel.x = 15 + PropertiesPanel.width/2 
 PropertiesPanel.y = (_H - 5) - PropertiesPanel.height/2 
-
 
 local TextOptions = 
 {
@@ -71,8 +70,76 @@ local PropertiesScaleXtext = createmyText("width =", PropertiesPanel.x - Propert
 local PropertiesScaleYtext = createmyText("height =", PropertiesPanel.x - PropertiesPanel.width/2 + 70, PropertiesPanel.y - PropertiesPanel.height/2 + 80)
 local PropertiesOpacitytext = createmyText("alpha =", PropertiesPanel.x - PropertiesPanel.width/2 + 70, PropertiesPanel.y - PropertiesPanel.height/2 + 100)
 local PropertiesRotationtext = createmyText("rotation =", PropertiesPanel.x - PropertiesPanel.width/2 + 70, PropertiesPanel.y - PropertiesPanel.height/2 + 140)
-local PropertiesXinput = native.newTextField(PropertiesXtext.x+60, PropertiesXtext.y, 100, 15)
+local flipXText = createmyText("flipX", PropertiesPanel.x - PropertiesPanel.width/2 + 70, PropertiesPanel.y - PropertiesPanel.height/2 + 160)
+local flipYText = createmyText("flipY", PropertiesPanel.x - PropertiesPanel.width/2 + 140, PropertiesPanel.y - PropertiesPanel.height/2 + 160)
 
+-- Path to your images
+local uncheckedImage = "GFX/checkOFF.png"
+local checkedImage = "GFX/checkON.png"
+
+-- Function to handle checkbox state change
+local function toggleCheckbox(event)
+    local checkbox = event.target
+    if event.phase == "ended" then
+        if selectedImage then
+            checkbox:setCheckedState(not checkbox.isChecked)
+        end
+    end
+    return true
+end
+
+-- Method to set the checkbox state
+local function setCheckedState(self, state)
+    self.isChecked = state
+    local imagePath = state and checkedImage or uncheckedImage
+
+    -- Update the display object image
+    self.fill = { type = "image", filename = imagePath }
+
+    -- Apply the flip logic
+    if state == true then
+        if self.id == "checkboxFlipX" then
+            selectedImage.xScale = -1
+            print("flippingX")
+        else
+            selectedImage.yScale = -1
+            print("flippingY")
+        end
+    else
+        if self.id == "checkboxFlipX" then
+            selectedImage.xScale = 1
+        else
+            selectedImage.yScale = 1
+        end
+    end
+end
+
+-- Create the initial checkboxes
+local checkboxFlipX = display.newImage(propertiesGroup, uncheckedImage)
+checkboxFlipX.x = flipXText.x + 19
+checkboxFlipX.y = flipXText.y
+checkboxFlipX:scale(0.2, 0.2)
+checkboxFlipX.originalX = checkboxFlipX.x
+checkboxFlipX.originalY = checkboxFlipX.y
+checkboxFlipX.isChecked = false
+checkboxFlipX.id = "checkboxFlipX" -- Assign an ID for identification
+checkboxFlipX.setCheckedState = setCheckedState
+checkboxFlipX:addEventListener("touch", toggleCheckbox)
+
+local checkboxFlipY = display.newImage(propertiesGroup, uncheckedImage)
+checkboxFlipY.x = flipYText.x + 19
+checkboxFlipY.y = flipYText.y
+checkboxFlipY:scale(0.2, 0.2)
+checkboxFlipY.originalX = checkboxFlipY.x
+checkboxFlipY.originalY = checkboxFlipY.y
+checkboxFlipY.isChecked = false
+checkboxFlipY.id = "checkboxFlipY" -- Assign an ID for identification
+checkboxFlipY.setCheckedState = setCheckedState
+checkboxFlipY:addEventListener("touch", toggleCheckbox)
+
+
+
+local PropertiesXinput = native.newTextField(PropertiesXtext.x+60, PropertiesXtext.y, 100, 15)
 local PropertiesYinput = native.newTextField(PropertiesYtext.x+60, PropertiesYtext.y, 100, 15)
 local PropertiesScaleXinput = native.newTextField(PropertiesScaleXtext.x+60, PropertiesScaleXtext.y, 100, 15)
 local PropertiesScaleYinput = native.newTextField(PropertiesScaleYtext.x+60, PropertiesScaleYtext.y, 100, 15)
@@ -217,7 +284,10 @@ PropertiesRotationinput:addEventListener("userInput", onRotationInput)
 local panelVisible = true
 local function updateParameters() 
     if panelVisible == false then
-        transition.to(propertiesGroup,{alpha = 1, time = 150, 
+        PropertiesPanel.xScale = 0.8
+        PropertiesPanel.yScale = 0.8
+        tt(PropertiesPanel, {xScale = 1, yScale = 1, time= 80, transition=easing.inOutBack})
+        tt(propertiesGroup,{alpha = 1, time = 150, 
         onComplete = function()PropertiesXinput.isVisible = true
             PropertiesRotationinput.isVisible = true
             PropertiesAlphainput.isVisible = true
@@ -234,7 +304,40 @@ local function updateParameters()
     OpacitySlider.alpha = 1
     OpacitySlider:setValue(selectedImage.alpha)
     PropertiesRotationinput.text = selectedImage.rotation
+    if selectedImage.xScale == -1 then
+        checkboxFlipX:setCheckedState(true)
+    else
+        checkboxFlipX:setCheckedState(false)
+    end
+    if selectedImage.yScale == -1 then
+        checkboxFlipY:setCheckedState(true)
+    else
+        checkboxFlipY:setCheckedState(false)
+    end
+
 end
+local function makePanelInvisible()
+
+    PropertiesXinput.isVisible = false
+    PropertiesRotationinput.isVisible = false
+    PropertiesAlphainput.isVisible = false
+    PropertiesScaleYinput.isVisible = false
+    PropertiesScaleXinput.isVisible = false
+    PropertiesYinput.isVisible = false
+    propertiesGroup.alpha = 0
+    PropertiesXinput.text = ""
+    PropertiesYinput.text = ""
+    PropertiesScaleXinput.text = ""
+    PropertiesScaleYinput.text = ""
+    PropertiesAlphainput.text = ""
+    OpacitySlider.alpha = 0.1
+    PropertiesRotationinput.text = ""
+    checkboxFlipX:setCheckedState(false)
+    checkboxFlipY:setCheckedState(false)
+    panelVisible = false
+end
+--makePanelInvisible()
+
 local function clearParameters()
     if panelVisible == true then
         PropertiesXinput.isVisible = false
@@ -243,7 +346,7 @@ local function clearParameters()
         PropertiesScaleYinput.isVisible = false
         PropertiesScaleXinput.isVisible = false
         PropertiesYinput.isVisible = false
-        transition.to(propertiesGroup,{alpha = 0, time = 150,
+        tt(propertiesGroup,{alpha = 0, time = 150,
         onComplete = function() end})
     end
     PropertiesXinput.text = ""
@@ -680,7 +783,7 @@ local function handleTouch(event)
         handle.startRotation = selectedImage.rotation
         --handle:scale(HandleScale, HandleScale) -- Scale up the handle being dragged
         transition.cancel("scaleHandles")
-        transition.to(handle, {xScale = HandleScale, yScale = HandleScale, time = 150, tag = "scaleHandles"})
+        tt(handle, {xScale = HandleScale, yScale = HandleScale, time = 150, tag = "scaleHandles"})
 
     elseif handle.isFocus then
         if event.phase == "moved" then
@@ -714,7 +817,7 @@ local function handleTouch(event)
             handle.isFocus = false
             --handle:scale(1 / HandleScale, 1 / HandleScale) -- Scale back the handle to its original size
             transition.cancel("scaleHandles")
-            transition.to(handle, {xScale = 1, yScale = 1, time = 150, tag = "scaleHandles"})
+            tt(handle, {xScale = 1, yScale = 1, time = 150, tag = "scaleHandles"})
         end
     end
     return true
@@ -1166,8 +1269,6 @@ togleVisibility =function(visible,imageID)
     end
 
 end
-
-
 -- Function to delete an image and update the scroll view
 deleteImage = function(imageID)
     -- Remove the image from the images table
@@ -1338,10 +1439,6 @@ local function backgroundTouch(event)
     end
     return true
 end
-
-
-
-
 
 --- -save load functionality
 local function gatherImageData()
@@ -1552,7 +1649,6 @@ exportWorkspace = function()
         end
     end
 end
-
 
 -- Add the background touch listener to the entire screen
 local background = display.newRect(_W / 2, _H / 2, _W, _H)
