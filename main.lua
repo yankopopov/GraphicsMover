@@ -1,7 +1,10 @@
 -----------------------------------------------------------------------------------------
 -- main.lua
 -----------------------------------------------------------------------------------------
+require "ssk2.loadSSK"
+_G.ssk.init()
 local json = require("json")
+local save = require("saveexport")
 -- Set up display width and height
 _W = display.contentWidth
 _H = display.contentHeight
@@ -20,14 +23,36 @@ uiGroup:toFront()
 local myPlugin = require("plugin.tinyfiledialogs")
 local Service = require("service")
 
+local isPanning = false
+local startPanX, startPanY
+
 --------------------------------------
--- Declarations --- 
+-- Declarations ---
 --------------------------------------
 local selectedButton = "resize" -- Resize button selected by default
-local removeHandles, showHandles, updateHandles, updateTextColors, moveImageUp, 
-moveImageDown, deleteImage, selectedImage, ButtonRotate, ButtonResize,
-moveImageToTop, moveImageToBottom, saveWorkspace, loadWorkspace,updateImageListOrde,
-exportWorkspace;
+local removeHandles,
+    showHandles,
+    updateHandles,
+    updateTextColors,
+    moveImageUp,
+    moveImageDown,
+    deleteImage,
+    selectedImage,
+    ButtonRotate,
+    ButtonResize,
+    moveImageToTop,
+    moveImageToBottom,
+    saveWorkspace,
+    loadWorkspace,
+    updateImageListOrde,
+    exportWorkspace,
+    gatherImageData,
+    clearWorkspace,
+    imageTouch,
+    addImageToList,
+    reorderImageGroup,
+    selectResize,
+    selectRotate
 local images = {}
 local handles = {}
 local resizeHandles = {}
@@ -40,15 +65,21 @@ local createdImmages = 0
 
 local PropertiesPanel = display.newRoundedRect(propertiesGroup, _W / 2, _H / 2, 210, 180, 5)
 PropertiesPanel:setFillColor(0.8, 0.8, 0.8, 0.8)
-PropertiesPanel.x = 15 + PropertiesPanel.width/2 
-PropertiesPanel.y = (_H - 5) - PropertiesPanel.height/2 
+PropertiesPanel.x = 15 + PropertiesPanel.width / 2
+PropertiesPanel.y = (_H - 5) - PropertiesPanel.height / 2
 
-local TextOptions = 
-{
+PropertiesPanel:addEventListener(
+    "touch",
+    function()
+        return true
+    end
+)
+
+local TextOptions = {
     parent = propertiesGroup,
     text = "txt",
-    x =0,
-    y =0,
+    x = 0,
+    y = 0,
     font = native.systemFont,
     fontSize = 15 * 2
 }
@@ -64,14 +95,54 @@ local function createmyText(text, x, y)
     myText.anchorX = 1
     return myText
 end
-local PropertiesXtext = createmyText(" x =", PropertiesPanel.x - PropertiesPanel.width/2 + 70, PropertiesPanel.y - PropertiesPanel.height/2 + 20)
-local PropertiesYtext = createmyText("y =", PropertiesPanel.x - PropertiesPanel.width/2 + 70, PropertiesPanel.y - PropertiesPanel.height/2 + 40)
-local PropertiesScaleXtext = createmyText("width =", PropertiesPanel.x - PropertiesPanel.width/2 + 70, PropertiesPanel.y - PropertiesPanel.height/2 + 60)
-local PropertiesScaleYtext = createmyText("height =", PropertiesPanel.x - PropertiesPanel.width/2 + 70, PropertiesPanel.y - PropertiesPanel.height/2 + 80)
-local PropertiesOpacitytext = createmyText("alpha =", PropertiesPanel.x - PropertiesPanel.width/2 + 70, PropertiesPanel.y - PropertiesPanel.height/2 + 100)
-local PropertiesRotationtext = createmyText("rotation =", PropertiesPanel.x - PropertiesPanel.width/2 + 70, PropertiesPanel.y - PropertiesPanel.height/2 + 140)
-local flipXText = createmyText("flipX", PropertiesPanel.x - PropertiesPanel.width/2 + 70, PropertiesPanel.y - PropertiesPanel.height/2 + 160)
-local flipYText = createmyText("flipY", PropertiesPanel.x - PropertiesPanel.width/2 + 140, PropertiesPanel.y - PropertiesPanel.height/2 + 160)
+local PropertiesXtext =
+    createmyText(
+    " x =",
+    PropertiesPanel.x - PropertiesPanel.width / 2 + 70,
+    PropertiesPanel.y - PropertiesPanel.height / 2 + 20
+)
+local PropertiesYtext =
+    createmyText(
+    "y =",
+    PropertiesPanel.x - PropertiesPanel.width / 2 + 70,
+    PropertiesPanel.y - PropertiesPanel.height / 2 + 40
+)
+local PropertiesScaleXtext =
+    createmyText(
+    "width =",
+    PropertiesPanel.x - PropertiesPanel.width / 2 + 70,
+    PropertiesPanel.y - PropertiesPanel.height / 2 + 60
+)
+local PropertiesScaleYtext =
+    createmyText(
+    "height =",
+    PropertiesPanel.x - PropertiesPanel.width / 2 + 70,
+    PropertiesPanel.y - PropertiesPanel.height / 2 + 80
+)
+local PropertiesOpacitytext =
+    createmyText(
+    "alpha =",
+    PropertiesPanel.x - PropertiesPanel.width / 2 + 70,
+    PropertiesPanel.y - PropertiesPanel.height / 2 + 100
+)
+local PropertiesRotationtext =
+    createmyText(
+    "rotation =",
+    PropertiesPanel.x - PropertiesPanel.width / 2 + 70,
+    PropertiesPanel.y - PropertiesPanel.height / 2 + 140
+)
+local flipXText =
+    createmyText(
+    "flipX",
+    PropertiesPanel.x - PropertiesPanel.width / 2 + 70,
+    PropertiesPanel.y - PropertiesPanel.height / 2 + 160
+)
+local flipYText =
+    createmyText(
+    "flipY",
+    PropertiesPanel.x - PropertiesPanel.width / 2 + 140,
+    PropertiesPanel.y - PropertiesPanel.height / 2 + 160
+)
 
 -- Path to your images
 local uncheckedImage = "GFX/checkOFF.png"
@@ -94,22 +165,21 @@ local function setCheckedState(self, state)
     local imagePath = state and checkedImage or uncheckedImage
 
     -- Update the display object image
-    self.fill = { type = "image", filename = imagePath }
-
-    -- Apply the flip logic
-    if state == true then
-        if self.id == "checkboxFlipX" then
-            selectedImage.xScale = -1
-            print("flippingX")
+    self.fill = {type = "image", filename = imagePath}
+    if selectedImage then
+        -- Apply the flip logic
+        if state == true then
+            if self.id == "checkboxFlipX" then
+                selectedImage.xScale = -1
+            else
+                selectedImage.yScale = -1
+            end
         else
-            selectedImage.yScale = -1
-            print("flippingY")
-        end
-    else
-        if self.id == "checkboxFlipX" then
-            selectedImage.xScale = 1
-        else
-            selectedImage.yScale = 1
+            if self.id == "checkboxFlipX" then
+                selectedImage.xScale = 1
+            else
+                selectedImage.yScale = 1
+            end
         end
     end
 end
@@ -137,26 +207,21 @@ checkboxFlipY.id = "checkboxFlipY" -- Assign an ID for identification
 checkboxFlipY.setCheckedState = setCheckedState
 checkboxFlipY:addEventListener("touch", toggleCheckbox)
 
-
-
-local PropertiesXinput = native.newTextField(PropertiesXtext.x+60, PropertiesXtext.y, 100, 15)
-local PropertiesYinput = native.newTextField(PropertiesYtext.x+60, PropertiesYtext.y, 100, 15)
-local PropertiesScaleXinput = native.newTextField(PropertiesScaleXtext.x+60, PropertiesScaleXtext.y, 100, 15)
-local PropertiesScaleYinput = native.newTextField(PropertiesScaleYtext.x+60, PropertiesScaleYtext.y, 100, 15)
-local PropertiesAlphainput = native.newTextField(PropertiesOpacitytext.x+60, PropertiesOpacitytext.y, 100, 15)
-local PropertiesRotationinput = native.newTextField(PropertiesRotationtext.x+60, PropertiesRotationtext.y, 100, 15)
-
+local PropertiesXinput = native.newTextField(PropertiesXtext.x + 60, PropertiesXtext.y, 100, 15)
+local PropertiesYinput = native.newTextField(PropertiesYtext.x + 60, PropertiesYtext.y, 100, 15)
+local PropertiesScaleXinput = native.newTextField(PropertiesScaleXtext.x + 60, PropertiesScaleXtext.y, 100, 15)
+local PropertiesScaleYinput = native.newTextField(PropertiesScaleYtext.x + 60, PropertiesScaleYtext.y, 100, 15)
+local PropertiesAlphainput = native.newTextField(PropertiesOpacitytext.x + 60, PropertiesOpacitytext.y, 100, 15)
+local PropertiesRotationinput = native.newTextField(PropertiesRotationtext.x + 60, PropertiesRotationtext.y, 100, 15)
 
 local function SliderChanged(value)
-    print(value)
     if selectedImage then
         selectedImage.alpha = value
         PropertiesAlphainput.text = string.format("%.2f", value)
     end
 end
 
-local SliderOptions = 
-{
+local SliderOptions = {
     width = 95,
     height = 3,
     thumbRadius = 6,
@@ -172,13 +237,13 @@ OpacitySlider.x = PropertiesOpacitytext.x + 60
 OpacitySlider.y = PropertiesOpacitytext.y + 20
 
 local OpacityHighImage = display.newImage(propertiesGroup, "GFX/opacityHigh.png")
-OpacityHighImage.x = OpacitySlider.x + OpacitySlider.width -40
-OpacityHighImage.y = OpacitySlider.y 
+OpacityHighImage.x = OpacitySlider.x + OpacitySlider.width - 40
+OpacityHighImage.y = OpacitySlider.y
 OpacityHighImage.xScale = 0.2
 OpacityHighImage.yScale = 0.2
 local OpacityLowImage = display.newImage(propertiesGroup, "GFX/opacityLow.png")
 OpacityLowImage.x = OpacitySlider.x - 60
-OpacityLowImage.y = OpacitySlider.y 
+OpacityLowImage.y = OpacitySlider.y
 OpacityLowImage.xScale = 0.2
 OpacityLowImage.yScale = 0.2
 
@@ -280,20 +345,27 @@ end
 
 PropertiesRotationinput:addEventListener("userInput", onRotationInput)
 
-
 local panelVisible = true
-local function updateParameters() 
+local function updateParameters()
     if panelVisible == false then
         PropertiesPanel.xScale = 0.8
         PropertiesPanel.yScale = 0.8
-        tt(PropertiesPanel, {xScale = 1, yScale = 1, time= 80, transition=easing.inOutBack})
-        tt(propertiesGroup,{alpha = 1, time = 150, 
-        onComplete = function()PropertiesXinput.isVisible = true
-            PropertiesRotationinput.isVisible = true
-            PropertiesAlphainput.isVisible = true
-            PropertiesScaleYinput.isVisible = true
-            PropertiesScaleXinput.isVisible = true
-            PropertiesYinput.isVisible = true end})
+        tt(PropertiesPanel, {xScale = 1, yScale = 1, time = 80, transition = easing.inOutBack})
+        tt(
+            propertiesGroup,
+            {
+                alpha = 1,
+                time = 150,
+                onComplete = function()
+                    PropertiesXinput.isVisible = true
+                    PropertiesRotationinput.isVisible = true
+                    PropertiesAlphainput.isVisible = true
+                    PropertiesScaleYinput.isVisible = true
+                    PropertiesScaleXinput.isVisible = true
+                    PropertiesYinput.isVisible = true
+                end
+            }
+        )
     end
     panelVisible = true
     PropertiesXinput.text = selectedImage.x
@@ -314,10 +386,8 @@ local function updateParameters()
     else
         checkboxFlipY:setCheckedState(false)
     end
-
 end
 local function makePanelInvisible()
-
     PropertiesXinput.isVisible = false
     PropertiesRotationinput.isVisible = false
     PropertiesAlphainput.isVisible = false
@@ -336,7 +406,7 @@ local function makePanelInvisible()
     checkboxFlipY:setCheckedState(false)
     panelVisible = false
 end
---makePanelInvisible()
+makePanelInvisible()
 
 local function clearParameters()
     if panelVisible == true then
@@ -346,8 +416,15 @@ local function clearParameters()
         PropertiesScaleYinput.isVisible = false
         PropertiesScaleXinput.isVisible = false
         PropertiesYinput.isVisible = false
-        tt(propertiesGroup,{alpha = 0, time = 150,
-        onComplete = function() end})
+        tt(
+            propertiesGroup,
+            {
+                alpha = 0,
+                time = 150,
+                onComplete = function()
+                end
+            }
+        )
     end
     PropertiesXinput.text = ""
     PropertiesYinput.text = ""
@@ -358,7 +435,6 @@ local function clearParameters()
     PropertiesRotationinput.text = ""
     panelVisible = false
 end
-
 -- Event listener for ButtonUp
 local function onButtonUpTouch(event)
     local self = event.target
@@ -379,7 +455,7 @@ local function onButtonUpTouch(event)
                 moveImageUp(selectedImage.ID)
             end
         end
-    end 
+    end
     return true
 end
 local function onButtonToBottomTouch(event)
@@ -401,7 +477,7 @@ local function onButtonToBottomTouch(event)
                 moveImageToBottom(selectedImage.ID)
             end
         end
-    end 
+    end
     return true
 end
 local function onButtonToTopTouch(event)
@@ -423,10 +499,9 @@ local function onButtonToTopTouch(event)
                 moveImageToTop(selectedImage.ID)
             end
         end
-    end 
+    end
     return true
 end
-
 local function onButtonDownTouch(event)
     local self = event.target
     local InitialScaleX = self.InitialScaleX
@@ -446,7 +521,7 @@ local function onButtonDownTouch(event)
                 moveImageDown(selectedImage.ID)
             end
         end
-    end 
+    end
     return true
 end
 onButtonExportTouch = function(event)
@@ -464,12 +539,11 @@ onButtonExportTouch = function(event)
             self.yScale = InitialScaleY
             display.getCurrentStage():setFocus(self, nil)
             self.isFocus = false
-            exportWorkspace()
+            save.exportWorkspace(gatherImageData)
         end
-    end 
+    end
     return true
 end
-
 -- Function to set button tint
 local function setButtonTint(button, isSelected)
     if isSelected then
@@ -478,7 +552,6 @@ local function setButtonTint(button, isSelected)
         button:setFillColor(1, 1, 1) -- Neutral tint
     end
 end
-
 -- Function to change handles when button is pressed
 local function updateHandlesForm()
     if selectedImage then
@@ -486,40 +559,20 @@ local function updateHandlesForm()
         showHandles()
     end
 end
-
 -- Event listener for ButtonResize
 local function onButtonResizeTouch(event)
     if event.phase == "ended" then
-        if selectedButton == "resize" then
-            selectedButton = nil
-            setButtonTint(ButtonResize, false)
-        else
-            selectedButton = "resize"
-            setButtonTint(ButtonResize, true)
-            setButtonTint(ButtonRotate, false)
-            updateHandlesForm()
-            updateHandles()
-        end
+        selectResize()
     end
     return true
 end
-
 -- Event listener for ButtonRotate
 local function onButtonRotateTouch(event)
     if event.phase == "ended" then
-        if selectedButton == "rotate" then
-            selectedButton = nil
-            setButtonTint(ButtonRotate, false)
-        else
-            selectedButton = "rotate"
-            setButtonTint(ButtonRotate, true)
-            setButtonTint(ButtonResize, false)
-            updateHandlesForm()
-        end
+        selectRotate()
     end
     return true
 end
-
 
 local function onButtonSaveTouch(event)
     local self = event.target
@@ -536,9 +589,9 @@ local function onButtonSaveTouch(event)
             self.yScale = InitialScaleY
             display.getCurrentStage():setFocus(self, nil)
             self.isFocus = false
-            timer.performWithDelay(100, saveWorkspace())
+            timer.performWithDelay(100, save.saveWorkspace(gatherImageData))
         end
-    end 
+    end
     return true
 end
 local function onButtonLoadTouch(event)
@@ -556,12 +609,27 @@ local function onButtonLoadTouch(event)
             self.yScale = InitialScaleY
             display.getCurrentStage():setFocus(self, nil)
             self.isFocus = false
-            timer.performWithDelay(100, loadWorkspace())
+            timer.performWithDelay(100, loadWorkspace)
         end
-    end 
+    end
     return true
 end
 
+local function onButtonPanTouch(event)
+    if event.phase == "ended" then
+        if selectedButton == "pan" then
+            selectedButton = nil
+            setButtonTint(ButtonPan, false)
+        else
+            selectedButton = "pan"
+            setButtonTint(ButtonPan, true)
+            setButtonTint(ButtonResize, false)
+            setButtonTint(ButtonRotate, false)
+            removeHandles()
+        end
+    end
+    return true
+end
 
 -- top buttons
 ButtonSave = display.newImage("GFX/save.png")
@@ -591,8 +659,6 @@ ButtonExport.x = 86
 ButtonExport.y = 20
 ButtonExport:addEventListener("touch", onButtonExportTouch)
 
-
-
 ButtonResize = display.newImage("GFX/resize.png")
 ButtonResize.xScale = 0.3
 ButtonResize.yScale = 0.3
@@ -612,24 +678,16 @@ ButtonPan.xScale = 0.3
 ButtonPan.yScale = 0.3
 ButtonPan.x = _W / 2 + 90
 ButtonPan.y = 20
---ButtonPan:addEventListener("touch", onButtonPanTouch)
-
-ButtonPoly = display.newImage("GFX/poly.png")
-ButtonPoly.xScale = 0.3
-ButtonPoly.yScale = 0.3
-ButtonPoly.x = _W / 2 + 36
-ButtonPoly.y = 20
---ButtonPoly:addEventListener("touch", onButtonPolyTouch)
+ButtonPan:addEventListener("touch", onButtonPanTouch)
 
 ButtonToTop = display.newImage("GFX/totop.png")
 ButtonToTop.xScale = 0.3
 ButtonToTop.yScale = 0.3
 ButtonToTop.InitialScaleX = ButtonToTop.xScale
 ButtonToTop.InitialScaleY = ButtonToTop.yScale
-ButtonToTop.x = _W -285
+ButtonToTop.x = _W - 285
 ButtonToTop.y = 20
 ButtonToTop:addEventListener("touch", onButtonToTopTouch)
-
 ButtonDown = display.newImage("GFX/up_arrow.png")
 ButtonDown.xScale = 0.3
 ButtonDown.yScale = 0.3
@@ -638,32 +696,27 @@ ButtonDown.InitialScaleY = ButtonDown.yScale
 ButtonDown.x = _W - 252
 ButtonDown.y = 20
 ButtonDown:addEventListener("touch", onButtonDownTouch)
-
 ButtonUp = display.newImage("GFX/down_arrow.png")
 ButtonUp.xScale = 0.3
 ButtonUp.yScale = 0.3
 ButtonUp.InitialScaleX = ButtonUp.xScale
 ButtonUp.InitialScaleY = ButtonUp.yScale
-ButtonUp.x = _W -219
+ButtonUp.x = _W - 219
 ButtonUp.y = 20
 ButtonUp:addEventListener("touch", onButtonUpTouch)
-
 ButtonToBottom = display.newImage("GFX/tobottom.png")
 ButtonToBottom.xScale = 0.3
 ButtonToBottom.yScale = 0.3
 ButtonToBottom.InitialScaleX = ButtonToBottom.xScale
 ButtonToBottom.InitialScaleY = ButtonToBottom.yScale
-ButtonToBottom.x = _W -186
+ButtonToBottom.x = _W - 186
 ButtonToBottom.y = 20
 ButtonToBottom:addEventListener("touch", onButtonToBottomTouch)
-
 ButtonAddNew = display.newImage("GFX/addnew.png")
 ButtonAddNew.xScale = 0.3
 ButtonAddNew.yScale = 0.3
 ButtonAddNew.x = _W - 285
 ButtonAddNew.y = _H - 20
-
-
 -- Add other UI elements (buttons, etc.) to the uiGroup
 uiGroup:insert(ButtonResize)
 uiGroup:insert(ButtonRotate)
@@ -676,24 +729,47 @@ uiGroup:insert(ButtonToBottom)
 uiGroup:insert(ButtonExport)
 uiGroup:insert(ButtonLoad)
 uiGroup:insert(ButtonSave)
-
-
+uiGroup:insert(ButtonPan)
 -- Set initial tint for buttons
 setButtonTint(ButtonResize, true)
 setButtonTint(ButtonRotate, false)
 setButtonTint(ButtonUp, false)
 setButtonTint(ButtonDown, false)
 
-
-
-
 -- Initialize visibility and movement variables
 local visible = false
-
-
 -- Track the state of the shift key
 local shiftPressed = false
 local controlPressed = false
+
+selectResize = function()
+    if selectedButton == "resize" then
+        selectedButton = nil
+        setButtonTint(ButtonResize, false)
+    else
+        selectedButton = "resize"
+        setButtonTint(ButtonResize, true)
+        setButtonTint(ButtonPan, false)
+        setButtonTint(ButtonRotate, false)
+        updateHandlesForm()
+        updateHandles()
+    end
+end
+
+selectRotate = function()
+    if selectedButton == "rotate" then
+        selectedButton = nil
+        setButtonTint(ButtonRotate, false)
+    else
+        selectedButton = "rotate"
+        setButtonTint(ButtonRotate, true)
+        setButtonTint(ButtonPan, false)
+        setButtonTint(ButtonResize, false)
+        updateHandlesForm()
+        updateHandles()
+    end
+end
+
 
 -- Key event listener to track shift key state
 local function onKeyEvent(event)
@@ -711,12 +787,20 @@ local function onKeyEvent(event)
             controlPressed = false
         end
     end
+    -- Add key event handling for "s" and "r"
+    if event.phase == "down" then
+        if event.keyName == "s" then
+            selectResize()
+        elseif event.keyName == "r" then
+            selectRotate()
+        end
+    end
+
+
     return false
 end
-
 Runtime:addEventListener("key", onKeyEvent)
-
--- Function to create handles for resizing the image
+-- Function to create handles for resizing, rotating, or quadrilateral distortion
 local function createHandle(x, y)
     local handle
     if selectedButton == "rotate" then
@@ -730,7 +814,6 @@ local function createHandle(x, y)
     handle:toFront()
     return handle
 end
-
 -- Function to update handle positions based on the image size, position, and rotation
 updateHandles = function()
     if selectedImage then
@@ -738,11 +821,14 @@ updateHandles = function()
         local halfHeight = selectedImage.height / 2
         local cosRot = math.cos(math.rad(selectedImage.rotation))
         local sinRot = math.sin(math.rad(selectedImage.rotation))
+        
+        -- Adjust positions based on the imageGroup's position
+        local groupX, groupY = imageGroup.x, imageGroup.y
 
         local function getRotatedPosition(x, y)
             return {
-                x = selectedImage.x + (x * cosRot - y * sinRot),
-                y = selectedImage.y + (x * sinRot + y * cosRot)
+                x = selectedImage.x + (x * cosRot - y * sinRot) + groupX,
+                y = selectedImage.y + (x * sinRot + y * cosRot) + groupY
             }
         end
 
@@ -769,9 +855,10 @@ updateHandles = function()
         end
     end
 end
-
 local HandleScale = 1.8
--- Touch listener for handles to resize or rotate the image
+local HandleScale = 1.8
+-- Touch listener for handles to resize, rotate, or distort the image
+-- Touch listener for handles to resize, rotate, or distort the image
 local function handleTouch(event)
     local handle = event.target
     if event.phase == "began" then
@@ -784,7 +871,6 @@ local function handleTouch(event)
         --handle:scale(HandleScale, HandleScale) -- Scale up the handle being dragged
         transition.cancel("scaleHandles")
         tt(handle, {xScale = HandleScale, yScale = HandleScale, time = 150, tag = "scaleHandles"})
-
     elseif handle.isFocus then
         if event.phase == "moved" then
             local dx, dy = event.x - handle.startX, event.y - handle.startY
@@ -805,7 +891,7 @@ local function handleTouch(event)
                 updateParameters()
             elseif selectedButton == "rotate" then
                 local imageCenterX, imageCenterY = selectedImage.x, selectedImage.y
-                local startAngle = math.atan2(handle.startY - imageCenterY, handle.startX - imageCenterX)
+                local startAngle = math.atan2(handle.startY - imageCenterX, handle.startX - imageCenterX)
                 local currentAngle = math.atan2(event.y - imageCenterY, event.x - imageCenterX)
                 local angleDelta = math.deg(currentAngle - startAngle)
                 selectedImage.rotation = handle.startRotation + angleDelta
@@ -822,7 +908,6 @@ local function handleTouch(event)
     end
     return true
 end
-
 -- Function to add touch listeners to handles
 local function addHandleListeners()
     for _, handle in pairs(handles) do
@@ -832,7 +917,6 @@ end
 
 -- Function to remove handles from the display
 removeHandles = function()
-    print "will remove handles"
     for _, handle in pairs(resizeHandles) do
         handle:removeSelf()
     end
@@ -867,7 +951,6 @@ showHandles = function()
                     selectedImage.y + selectedImage.height / 2
                 )
             }
-
             -- Add touch listeners to resize handles
             for _, handle in pairs(resizeHandles) do
                 handle:addEventListener("touch", handleTouch)
@@ -878,26 +961,22 @@ showHandles = function()
             local halfHeight = selectedImage.height / 2
             local cosRot = math.cos(math.rad(selectedImage.rotation))
             local sinRot = math.sin(math.rad(selectedImage.rotation))
-
             local function getRotatedPosition(x, y)
                 return {
                     x = selectedImage.x + (x * cosRot - y * sinRot),
                     y = selectedImage.y + (x * sinRot + y * cosRot)
                 }
             end
-
             local topLeft = getRotatedPosition(-halfWidth, -halfHeight)
             local topRight = getRotatedPosition(halfWidth, -halfHeight)
             local bottomLeft = getRotatedPosition(-halfWidth, halfHeight)
             local bottomRight = getRotatedPosition(halfWidth, halfHeight)
-
             rotateHandles = {
                 topLeft = createHandle(topLeft.x, topLeft.y),
                 topRight = createHandle(topRight.x, topRight.y),
                 bottomLeft = createHandle(bottomLeft.x, bottomLeft.y),
                 bottomRight = createHandle(bottomRight.x, bottomRight.y)
             }
-
             -- Set rotation for rotation handles
             for _, handle in pairs(rotateHandles) do
                 handle.rotation = selectedImage.rotation
@@ -909,7 +988,12 @@ showHandles = function()
 end
 
 -- Touch listener for selecting an image
-local function imageTouch(event)
+imageTouch = function(event)
+    -- Ignore touch events on images if pan mode is active
+    if selectedButton == "pan" then
+        return false
+    end
+
     local image = event.target
     if event.phase == "began" then
         display.getCurrentStage():setFocus(image, event.id)
@@ -954,14 +1038,14 @@ local function imageTouch(event)
 end
 
 -- Create a ScrollView for the list of images
-local scrollViewHeight = _H-83
+local scrollViewHeight = _H - 83
 local widget = require("widget")
 local scrollView =
     widget.newScrollView(
     {
-        width = 300, 
+        width = 300,
         height = scrollViewHeight,
-        scrollWidth = 300, 
+        scrollWidth = 300,
         scrollHeight = scrollViewHeight,
         verticalScrollDisabled = false,
         horizontalScrollDisabled = true,
@@ -988,7 +1072,12 @@ local function showRenamePopup(imageID, textElement)
     local renameGroup = display.newGroup()
     local background = display.newRoundedRect(renameGroup, _W / 2, _H / 2, 300, 200, 5)
     background:setFillColor(0.8, 0.8, 0.8, 0.8)
-
+    background:addEventListener(
+        "touch",
+        function()
+            return true
+        end
+    )
     local renameText =
         display.newText(
         {
@@ -1005,7 +1094,7 @@ local function showRenamePopup(imageID, textElement)
     renameText.yScale = 0.5
 
     local nameInput = native.newTextField(_W / 2, _H / 2, 200, 40)
-    nameInput.text = image.name  -- Set the initial text to the current image name
+    nameInput.text = image.name -- Set the initial text to the current image name
     renameGroup:insert(nameInput)
 
     local function onRenameComplete(event)
@@ -1048,7 +1137,6 @@ updateTextColors = function()
 end
 -- Table to track the order of images
 local imageOrder = {}
-
 -- Function to initialize the image order table
 local function initializeImageOrder()
     imageOrder = {}
@@ -1056,9 +1144,8 @@ local function initializeImageOrder()
         table.insert(imageOrder, img.ID)
     end
 end
-
 -- Function to reorder the imageGroup based on the order table
-local function reorderImageGroup()
+reorderImageGroup = function()
     for i, imageID in ipairs(imageOrder) do
         for j, img in ipairs(images) do
             if img.ID == imageID then
@@ -1068,7 +1155,6 @@ local function reorderImageGroup()
         end
     end
 end
-
 -- Function to move an image up in the order table
 local function moveImageInOrderTableUp(imageID)
     for i = 2, #imageOrder do
@@ -1079,7 +1165,6 @@ local function moveImageInOrderTableUp(imageID)
         end
     end
 end
-
 -- Function to move an image down in the order table
 local function moveImageInOrderTableDown(imageID)
     for i = 1, #imageOrder - 1 do
@@ -1093,7 +1178,7 @@ end
 
 local scrollViewItemCount = 0
 -- Initialize the image order table when adding a new image
-local function addImageToList(imageID)
+addImageToList = function(imageID)
     local group = display.newGroup()
     group.id = imageID
 
@@ -1116,7 +1201,7 @@ local function addImageToList(imageID)
         {
             text = image.name, -- Use the image's name for display
             x = 45,
-            y = 0,  -- Positioning within group will be handled later
+            y = 0, -- Positioning within group will be handled later
             font = native.systemFont,
             fontSize = 20 * 2
         }
@@ -1133,7 +1218,7 @@ local function addImageToList(imageID)
     -- Rename button
     local renameButton = display.newImage("GFX/edit.png")
     renameButton.x = 20
-    renameButton.y = 0  -- Positioning within group will be handled later
+    renameButton.y = 0 -- Positioning within group will be handled later
     renameButton.xScale = 0.3
     renameButton.yScale = 0.3
     renameButton:setFillColor(0.7, 0.7, 0.8)
@@ -1153,14 +1238,11 @@ local function addImageToList(imageID)
     -- Delete button
     local deleteButton = display.newImage("GFX/delete.png")
     deleteButton.x = 280
-    deleteButton.y = 0  -- Positioning within group will be handled later
+    deleteButton.y = 0 -- Positioning within group will be handled later
     deleteButton.xScale = 0.3
     deleteButton.yScale = 0.3
     deleteButton:setFillColor(1, 0.6, 0.6)
     group:insert(deleteButton)
-
-
-
 
     -- Touch listener for the delete button
     deleteButton:addEventListener(
@@ -1175,46 +1257,43 @@ local function addImageToList(imageID)
 
     local visibleButton = display.newImage("GFX/visible.png")
     visibleButton.x = 248
-    visibleButton.y = 0  -- Positioning within group will be handled later
+    visibleButton.y = 0 -- Positioning within group will be handled later
     visibleButton.xScale = 0.3
     visibleButton.yScale = 0.3
     visibleButton:setFillColor(0.6, 0.6, 0.7)
     group:insert(visibleButton)
 
--- Flag to track the button's state
+    -- Flag to track the button's state
     local isButtonPressed = false
 
     -- Function to change the button image when pressed
     local function onVisibleButtonTouch(event)
         if event.phase == "began" then
-            visibleButton:removeSelf()  -- Remove the old image
-            
+            visibleButton:removeSelf() -- Remove the old image
+
             if isButtonPressed then
-                visibleButton = display.newImage("GFX/visible.png")  -- Set the original image
+                visibleButton = display.newImage("GFX/visible.png") -- Set the original image
                 togleVisibility(true, imageID)
                 isButtonPressed = false
             else
-                visibleButton = display.newImage("GFX/invisible.png")  -- Set the new image
+                visibleButton = display.newImage("GFX/invisible.png") -- Set the new image
                 togleVisibility(false, imageID)
                 isButtonPressed = true
             end
-            
+
             visibleButton.x = 248
             visibleButton.y = 0
             visibleButton.xScale = 0.3
             visibleButton.yScale = 0.3
             visibleButton:setFillColor(0.6, 0.6, 0.7)
             group:insert(visibleButton)
-            
             -- Re-add the event listener to the new image
             visibleButton:addEventListener("touch", onVisibleButtonTouch)
         end
         return true
     end
-
     -- Add the event listener to the button
     visibleButton:addEventListener("touch", onVisibleButtonTouch)
-
     -- Make the text element touch-sensitive to select the image
     text:addEventListener(
         "touch",
@@ -1235,9 +1314,7 @@ local function addImageToList(imageID)
             return true
         end
     )
-
     scrollView:insert(group)
-
     -- Add the new image to the order table
     table.insert(imageOrder, imageID)
     group.y = 0
@@ -1253,8 +1330,7 @@ updateImageListOrder = function()
         end
     end
 end
-
-togleVisibility =function(visible,imageID)
+togleVisibility = function(visible, imageID)
     for i, img in ipairs(images) do
         if img.ID == imageID then
             if selectedImage == img then
@@ -1267,7 +1343,6 @@ togleVisibility =function(visible,imageID)
             break
         end
     end
-
 end
 -- Function to delete an image and update the scroll view
 deleteImage = function(imageID)
@@ -1302,8 +1377,6 @@ deleteImage = function(imageID)
     updateImageListOrder()
     reorderImageGroup()
 end
-
-
 -- Function to move an image to the top in the order table
 local function moveImageInOrderTableToTop(imageID)
     for i = 1, #imageOrder do
@@ -1314,7 +1387,6 @@ local function moveImageInOrderTableToTop(imageID)
         end
     end
 end
-
 -- Function to move an image to the bottom in the order table
 local function moveImageInOrderTableToBottom(imageID)
     for i = 1, #imageOrder do
@@ -1325,7 +1397,6 @@ local function moveImageInOrderTableToBottom(imageID)
         end
     end
 end
-
 -- Function to move an image to the top
 moveImageToBottom = function(imageID)
     moveImageInOrderTableToTop(imageID)
@@ -1359,7 +1430,7 @@ local function nextStep(FileToProcessPath)
     local uniqueID = os.time() + math.random(1, 1000) -- Ensure a more unique ID
     createdImmages = createdImmages + 1
     local newImage = display.newImage(Service.get_file_name(FileToProcessPath), system.TemporaryDirectory)
-    newImage.path = FileToProcessPath
+    newImage.pathToSave = FileToProcessPath
     newImage.x = _W / 2
     newImage.y = _H / 2
     newImage.ID = uniqueID -- Unique internal ID
@@ -1387,7 +1458,7 @@ local function LoadFileFN()
         title = "Choose image(s) (PNG) to process",
         filter_patterns = "*.png",
         filter_description = "PNG FILES",
-        allow_multiple_selects = true  -- Allow multiple file selections
+        allow_multiple_selects = true -- Allow multiple file selections
     }
     local FileToProcessPaths = myPlugin.openFileDialog(opts)
     if FileToProcessPaths then
@@ -1425,11 +1496,27 @@ local function LoadFileFunction(event)
     end
     return true
 end
-
 ButtonAddNew:addEventListener("touch", LoadFileFunction)
 
 -- Touch listener for deselecting the image by clicking on the background
 local function backgroundTouch(event)
+    if selectedButton == "pan" then
+        if event.phase == "began" then
+            display.getCurrentStage():setFocus(event.target, event.id)
+            isPanning = true
+            startPanX, startPanY = event.x - imageGroup.x, event.y - imageGroup.y
+        elseif isPanning then
+            if event.phase == "moved" then
+                imageGroup.x = event.x - startPanX
+                imageGroup.y = event.y - startPanY
+            elseif event.phase == "ended" or event.phase == "cancelled" then
+                display.getCurrentStage():setFocus(event.target, nil)
+                isPanning = false
+            end
+        end
+        return true
+    end
+    -- Existing deselect logic
     if event.phase == "ended" then
         if selectedImage then
             removeHandles()
@@ -1441,21 +1528,27 @@ local function backgroundTouch(event)
 end
 
 --- -save load functionality
-local function gatherImageData()
+gatherImageData = function()
     local imageData = {}
     for i, imageID in ipairs(imageOrder) do
         for _, img in ipairs(images) do
             if img.ID == imageID then
-                table.insert(imageData, {
-                    path = img.path,
-                    name = img.name,
-                    x = img.x,
-                    y = img.y,
-                    width = img.width,
-                    height = img.height,
-                    rotation = img.rotation,
-                    hierarchyIndex = i  -- Save the position in the display hierarchy
-                })
+                table.insert(
+                    imageData,
+                    {
+                        path = img.pathToSave,
+                        name = img.name,
+                        x = img.x,
+                        y = img.y,
+                        width = img.width,
+                        height = img.height,
+                        rotation = img.rotation,
+                        alpha = img.alpha, -- Add alpha
+                        xScale = img.xScale, -- Add xScale
+                        yScale = img.yScale, -- Add yScale
+                        hierarchyIndex = i -- Save the position in the display hierarchy
+                    }
+                )
                 break
             end
         end
@@ -1463,28 +1556,7 @@ local function gatherImageData()
     return imageData
 end
 
-saveWorkspace = function()
-    local opts = {
-        title = "Save Workspace",
-        filter_patterns = "*.lua",
-        filter_description = "Lua Files",
-        default_path_and_file = "untitled.lua",  -- Set the default file name
-    }
-    local savePath = myPlugin.saveFileDialog(opts)
-    if savePath then
-        local imageData = gatherImageData()
-        local serializedData = json.encode(imageData)
-        local file = io.open(savePath, "w")
-        if file then
-            file:write(serializedData)
-            file:close()
-        else
-            print("Error saving file")
-        end
-    end
-end
-
-local function clearWorkspace()
+clearWorkspace = function()
     for _, img in ipairs(images) do
         img:removeSelf()
     end
@@ -1493,161 +1565,48 @@ local function clearWorkspace()
     textElements = {}
     scrollViewItemCount = 0 -- Reset the counter
     removeHandles()
-
     -- Clear the scroll view contents
-    if scrollView then
-        scrollView:removeSelf()
-        scrollView = nil
-
-        -- Recreate the scroll view
-        scrollView =
-            widget.newScrollView(
-            {
-                width = 300, 
-                height = scrollViewHeight,
-                scrollWidth = 300, 
-                scrollHeight = scrollViewHeight,
-                verticalScrollDisabled = false,
-                horizontalScrollDisabled = true,
-                backgroundColor = {0.9, 0.9, 0.9}
-            }
-        )
-        scrollView.x = _W - 150 -- Adjusted the x position to center the scroll view
-        scrollView.y = _H / 2
-        uiGroup:insert(scrollView)
-    end
+    scrollView:removeSelf()
+    scrollView = nil
+    -- Recreate the scroll view
+    scrollView =
+        widget.newScrollView(
+        {
+            width = 300,
+            height = scrollViewHeight,
+            scrollWidth = 300,
+            scrollHeight = scrollViewHeight,
+            verticalScrollDisabled = false,
+            horizontalScrollDisabled = true,
+            backgroundColor = {0.9, 0.9, 1, 0.5}
+        }
+    )
+    scrollView.x = _W - 150 -- Adjusted the x position to center the scroll view
+    scrollView.y = _H / 2
+    uiGroup:insert(scrollView)
 end
-
 loadWorkspace = function()
-    local confirm = native.showAlert("Confirmation", "Do you really want to clear the current workspace without saving?", { "Yes", "Cancel" }, function(event)
-        if event.action == "clicked" and event.index == 1 then
-            local opts = {
-                title = "Load Workspace",
-                filter_patterns = "*.lua",
-                filter_description = "Lua Files",
-                allow_multiple_selects = false,
-            }
-            local loadPath = myPlugin.openFileDialog(opts)
-            if loadPath then
-                local file = io.open(loadPath, "r")
-                if file then
-                    local serializedData = file:read("*a")
-                    file:close()
-                    local imageData = json.decode(serializedData)
-
-                    -- Add check for hierarchyIndex presence
-                    for _, data in ipairs(imageData) do
-                        if not data.hierarchyIndex then
-                            print("Error: Missing hierarchyIndex in saved data")
-                            return
-                        end
-                    end
-
-                    -- Clear current workspace
-                    clearWorkspace()
-
-                    -- Load new images
-                    for _, data in ipairs(imageData) do
-                        local originalPath = data.path
-                        local fileName = Service.get_file_name(originalPath)
-                        local tempPath = system.pathForFile(fileName, system.TemporaryDirectory)
-
-                        Service.copyFileToSB(
-                            fileName,
-                            Service.getPath(originalPath),
-                            fileName,
-                            system.TemporaryDirectory,
-                            true
-                        )
-
-                        local newImage = display.newImage(fileName, system.TemporaryDirectory)
-                        newImage.x = data.x
-                        newImage.y = data.y
-                        newImage.width = data.width
-                        newImage.height = data.height
-                        newImage.rotation = data.rotation
-                        newImage.ID = os.time() + math.random(1, 1000)  -- Generate a unique ID
-                        newImage.name = data.name
-                        newImage.path = originalPath
-                        newImage.hierarchyIndex = data.hierarchyIndex  -- Ensure hierarchyIndex is preserved
-                        newImage:addEventListener("touch", imageTouch)
-                        table.insert(images, newImage)
-                        addImageToList(newImage.ID)
-                    end
-
-                    -- Sort images based on hierarchyIndex and populate imageOrder
-                    table.sort(images, function(a, b)
-                        return a.hierarchyIndex < b.hierarchyIndex
-                    end)
-                    imageOrder = {}
-                    for _, img in ipairs(images) do
-                        table.insert(imageOrder, img.ID)
-                    end
-
-                    -- Reorder the imageGroup to reflect the hierarchy
-                    reorderImageGroup()
-
-                    -- Update the scroll view positions
-                    updateImageListOrder()
-                else
-                    print("Error loading file")
-                end
+    local confirm =
+        native.showAlert(
+        "Confirmation",
+        "Do you really want to clear the current workspace without saving?",
+        {"Yes", "Cancel"},
+        function(event)
+            if event.action == "clicked" and event.index == 1 then
+                clearWorkspace()
+                save.loadWorkspace(
+                    addImageToList,
+                    initializeImageOrder,
+                    updateImageListOrder,
+                    reorderImageGroup,
+                    imageTouch,
+                    images,
+                    imageOrder,
+                    imageGroup
+                )
             end
         end
-    end)
-end
-
-local function gatherImageExportData()
-    local imageData = {}
-    for i, img in ipairs(images) do
-        table.insert(imageData, {
-            path = "GFX/" .. Service.get_file_name(img.path),
-            name = img.name,
-            x = img.x,
-            y = img.y,
-            width = img.width,
-            height = img.height,
-            rotation = img.rotation,
-            hierarchyIndex = i  -- Save the position in the display hierarchy
-        })
-    end
-    return imageData
-end
-local function serializeToLuaTable(data)
-    local serialized = "return " .. require("json").encode(data)
-    return serialized
-end
-exportWorkspace = function()
-    local opts = {
-        title = "Export Workspace",
-        filter_patterns = "*.lua",
-        filter_description = "Lua Files",
-        default_path_and_file = "image_data.lua",
-    }
-    local exportPath = myPlugin.saveFileDialog(opts)
-    if exportPath then
-        local imageData = gatherImageData()
-        local file = io.open(exportPath, "w")
-        if file then
-            file:write("return {\n")
-            for _, data in ipairs(imageData) do
-                file:write("    {\n")
-                file:write(string.format("        y = %f,\n", data.y))
-                file:write(string.format("        path = \"%s\",\n", "GFX/" .. Service.get_file_name(data.path)))
-                file:write(string.format("        name = \"%s\",\n", data.name))
-                file:write(string.format("        x = %f,\n", data.x))
-                file:write(string.format("        height = %f,\n", data.height))
-                file:write(string.format("        rotation = %d,\n", data.rotation))
-                file:write(string.format("        hierarchyIndex = %d,\n", data.hierarchyIndex))
-                file:write(string.format("        width = %f\n", data.width))
-                file:write("    },\n")
-            end
-            file:write("}\n")
-            file:close()
-        else
-            print("Error exporting file")
-        end
-    end
+    )
 end
 
 -- Add the background touch listener to the entire screen

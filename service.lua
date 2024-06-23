@@ -75,6 +75,7 @@ M.copyFileToSB = function( srcName, srcPath, dstName, dstPath, overwrite )
     
     if not ( wfh ) then
         -- Error occurred; output the cause
+        native.showAlert("ERROR", "File error: " .. errorString)
         print( "File error: " .. errorString )
         return false
     else
@@ -127,6 +128,7 @@ M.copyFileFromSB = function( srcName, srcPath, dstName, dstPath, overwrite )
     if not ( wfh ) then
         -- Error occurred; output the cause
         print( "File error: " .. errorString )
+        native.showAlert("ERROR", "File error: " .. errorString)
         return false
     else
         -- Read the file and write to the destination directory

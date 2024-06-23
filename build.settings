@@ -67,15 +67,16 @@ settings =
 		enableMinimizeButton = true,
 		enableMaximizeButton = true,
     },
-	macos = {
+
+	osx = {
 		entitlements = {
 			["com.apple.security.assets.pictures.read-write"] = true, -- get access to user's Pictures folder
+			["com.apple.security.files.downloads.read-write"] = true, -- get access to user's downloads folder
 			["com.apple.security.files.user-selected.read-write"] = true, -- get arbitrary access?
-			["com.apple.security.files.all"] = true,
+    	},
+			plist =
+        {            
+			NSHumanReadableCopyright = "Copyright © 2024 Yanko Popov",       
 		},
-		        plist =
-        {
-            NSHumanReadableCopyright = "Copyright © 2024 Yanko Popov"
-        },
-},
+	},
 }
